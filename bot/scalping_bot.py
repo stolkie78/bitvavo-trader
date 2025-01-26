@@ -15,20 +15,24 @@ import argparse
 class ScalpingBot:
     """A scalping bot with full data pipeline, training, and AI integration."""
 
-    VERSION = "0.1.0"  # Bot version for identification
+    VERSION = "1.0.0"  # Bot version for identification
 
-    def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo):
+    def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """Initializes the ScalpingBot."""
         self.config = config
         self.logger = logger
         self.state_managers = state_managers
         self.bitvavo = bitvavo
+        self.args = args  # Store startup arguments for logging
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
         self.end_time = datetime.now() + timedelta(hours=self.config["TRADING_PERIOD_HOURS"])
+
+        # Log startup parameters
+        self.log_startup_parameters()
 
         # Train or load LightGBM model
         if self.config.get("TRAIN_MODEL", False):
@@ -39,6 +43,12 @@ class ScalpingBot:
     def log_message(self, message: str, to_slack: bool = False):
         """Logs a message with optional Slack notification."""
         self.logger.log(message, to_console=True, to_slack=to_slack)
+
+    def log_startup_parameters(self):
+        """Logs the startup parameters passed to the bot."""
+        self.log_message(f"🚀 Starting ScalpingBot v{self.VERSION}")
+        self.log_message(f"🔧 Startup parameters: {self.args}", to_slack=False)
+        self.log_message(f"📁 Configuration loaded from: {self.args.config}", to_slack=False)
 
     def load_lightgbm_model(self):
         """Loads the LightGBM model for AI-based predictions."""
@@ -62,7 +72,7 @@ class ScalpingBot:
 
     def run(self):
         """Runs the scalping bot's main trading loop."""
-        self.log_message(f"🚀 Starting ScalpingBot v{self.VERSION} with updated data preparation!", to_slack=True)
+        self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
             while datetime.now() < self.end_time:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
@@ -147,6 +157,6 @@ if __name__ == "__main__":
     state_managers = {pair: StateManager(pair, logger) for pair in config["PAIRS"]}
     bitvavo = initialize_bitvavo(ConfigLoader.load_config("bitvavo.json"))
 
-    # Start the bot with the specified configuration
-    bot = ScalpingBot(config, logger, state_managers, bitvavo)
+    # Start the bot with the specified configuration and startup arguments
+    bot = ScalpingBot(config, logger, state_managers, bitvavo, args)
     bot.run()
