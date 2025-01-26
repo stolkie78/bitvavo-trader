@@ -1,0 +1,157 @@
+# Deployment voor BTC-EUR
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-bot-btc-eur
+  labels:
+    app: trading-bot
+    crypto: btc-eur
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-bot
+      crypto: btc-eur
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+        crypto: btc-eur
+    spec:
+      containers:
+      - name: trading-bot-container
+        image: bitvavo-scalper-v2:0.9 # Vervang dit door je eigen image
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+        env:
+        - name: CONFIG_SYMBOL
+          value: "BTC-EUR"
+        - name: CONFIG_THRESHOLD_BUY
+          value: "1.0"
+        - name: CONFIG_THRESHOLD_SELL
+          value: "2.0"
+        - name: CONFIG_STOP_LOSS
+          value: "-0.7"
+        - name: CONFIG_TRADE_AMOUNT
+          value: "0.005"
+        - name: CONFIG_CHECK_INTERVAL
+          value: "10"
+        - name: CONFIG_DEMO_MODE
+          value: "true"
+        - name: CONFIG_WINDOW_SIZE
+          value: "10"
+        - name: CONFIG_TRADE_FEE_PERCENTAGE
+          value: "0.5"
+---
+
+# Deployment voor SOL-EUR
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-bot-sol-eur
+  labels:
+    app: trading-bot
+    crypto: sol-eur
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-bot
+      crypto: sol-eur
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+        crypto: sol-eur
+    spec:
+      containers:
+      - name: trading-bot-container
+        image: bitvavo-scalper-v2:latest # Vervang dit door je eigen image
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+        env:
+        - name: CONFIG_SYMBOL
+          value: "SOL-EUR"
+        - name: CONFIG_THRESHOLD_BUY
+          value: "1.5"
+        - name: CONFIG_THRESHOLD_SELL
+          value: "2.5"
+        - name: CONFIG_STOP_LOSS
+          value: "-1.0"
+        - name: CONFIG_TRADE_AMOUNT
+          value: "10"
+        - name: CONFIG_CHECK_INTERVAL
+          value: "15"
+        - name: CONFIG_DEMO_MODE
+          value: "true"
+        - name: CONFIG_WINDOW_SIZE
+          value: "20"
+        - name: CONFIG_TRADE_FEE_PERCENTAGE
+          value: "0.5"
+---
+
+# Deployment voor ETH-EUR
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: trading-bot-eth-eur
+  labels:
+    app: trading-bot
+    crypto: eth-eur
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: trading-bot
+      crypto: eth-eur
+  template:
+    metadata:
+      labels:
+        app: trading-bot
+        crypto: eth-eur
+    spec:
+      containers:
+      - name: trading-bot-container
+        image: bitvavo-scalper-v2:latest # Vervang dit door je eigen image
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "500m"
+          limits:
+            memory: "512Mi"
+            cpu: "1"
+        env:
+        - name: CONFIG_SYMBOL
+          value: "ETH-EUR"
+        - name: CONFIG_THRESHOLD_BUY
+          value: "0.8"
+        - name: CONFIG_THRESHOLD_SELL
+          value: "1.8"
+        - name: CONFIG_STOP_LOSS
+          value: "-0.5"
+        - name: CONFIG_TRADE_AMOUNT
+          value: "0.1"
+        - name: CONFIG_CHECK_INTERVAL
+          value: "20"
+        - name: CONFIG_DEMO_MODE
+          value: "true"
+        - name: CONFIG_WINDOW_SIZE
+          value: "15"
+        - name: CONFIG_TRADE_FEE_PERCENTAGE
+          value: "0.5"
