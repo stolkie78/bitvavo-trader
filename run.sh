@@ -9,7 +9,7 @@ handle_error() {
 # Validate input arguments
 if [ "$#" -ne 3 ]; then
   echo "Usage: $0 <image_name> <tag> <config_name>"
-  echo "Example: ./run_scalper.sh bitvavo-scalper 0.1.0 top5_config"
+  echo "Example: $0 bitvavo-scalper 0.1.0 top5_config"
   exit 1
 fi
 
@@ -29,7 +29,7 @@ echo "🐳 Running Docker container '${IMAGE}_${TAG}_${CONFIG}'..."
 docker run --restart=always --name "${IMAGE}_${TAG}_${CONFIG}" -d \
   -v "$(pwd)/config/bitvavo.json:/app/bitvavo.json" \
   -v "$(pwd)/config/slack.json:/app/slack.json" \
-  -v "$(pwd)/config/${CONFIG}.json:/config/scalper.json" \
+  -v "$(pwd)/config/${CONFIG}.json:/app/scalper.json" \
   -v "${VOLUME_NAME}:/app/data" \
   "${IMAGE}:${TAG}" || handle_error "Failed to start Docker container '${IMAGE}_${TAG}_${CONFIG}'."
 
