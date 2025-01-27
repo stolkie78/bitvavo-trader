@@ -1,26 +1,26 @@
 
 # Bitvavo Scalping Bot
 
-The **Bitvavo Scalping Bot** is an automated cryptocurrency trading bot designed to operate on the Bitvavo platform. This bot uses technical indicators such as RSI, integrates AI models like LightGBM for enhanced decision-making, and incorporates dynamic thresholds for buying and selling.
+The **Bitvavo Scalping Bot** is an advanced automated cryptocurrency trading bot designed for the Bitvavo platform. It leverages technical indicators such as RSI, integrates AI models like LightGBM, and includes dynamic thresholds for intelligent buying and selling decisions. Additionally, it provides real-time Slack notifications and comprehensive logging.
 
 ---
 
 ## Features
 
-- **Multi-pair Trading**: Supports trading multiple pairs simultaneously.
-- **Daily Target**: Stops trading once a specified profit target is reached.
-- **Stop-Loss with Retry Count**: Prevents excessive losses by enforcing configurable stop-loss limits.
-- **Dynamic Price Drop Detection**: Considers significant price drops before buying.
-- **AI Model Integration**: Uses LightGBM for advanced decision-making.
-- **Portfolio Rebalancing**: Maintains portfolio alignment with specified allocations.
-- **Slack Notifications**: Sends real-time updates for trades and rebalancing activities.
-- **Detailed Logging**: Provides comprehensive logs for debugging and monitoring.
+- **Multi-pair Trading**: Simultaneously trade multiple cryptocurrency pairs.
+- **Daily Target**: Automatically stops trading once a daily profit target is reached.
+- **Stop-loss with Retry Mechanism**: Configurable stop-loss limits to prevent excessive losses.
+- **Dynamic Price Drop Detection**: Considers significant price drops before making buy decisions.
+- **AI Integration**: Uses LightGBM for enhanced decision-making.
+- **Portfolio Rebalancing**: Keeps the portfolio aligned with specified allocation percentages.
+- **Slack Notifications**: Sends trade updates and rebalancing alerts to Slack.
+- **Detailed Logging**: Comprehensive logs for debugging, performance analysis, and monitoring.
 
 ---
 
 ## Configuration
 
-The bot is configured using a JSON file. Below is an explanation of all the available parameters and how they influence the bot's behavior:
+The bot is configured via a JSON file. Below are the configuration parameters:
 
 ### General Settings
 
@@ -110,7 +110,12 @@ pip install -r requirements.txt
 
 ### OS Dependencies
 
-If using LightGBM, ensure OpenMP is installed. On macOS, install it using:
+If using LightGBM, ensure OpenMP is installed. On Debian-based systems, run:
+```bash
+apt-get update && apt-get install -y libomp-dev
+```
+
+For macOS, use:
 ```bash
 brew install libomp
 ```

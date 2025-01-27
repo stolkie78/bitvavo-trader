@@ -11,9 +11,10 @@ import os
 import time
 from datetime import datetime, timedelta
 import argparse
+import json
 
 class ScalpingBot:
-    VERSION = "1.1.0"  # Updated version with enhanced logic and debugging
+    VERSION = "0.1.2"  # Updated version with enhanced logic and debugging
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -41,9 +42,17 @@ class ScalpingBot:
         self.logger.log(message, to_console=True, to_slack=to_slack)
 
     def log_startup_parameters(self):
-        self.log_message(f"🚀 Starting ScalpingBot v{self.VERSION}")
-        self.log_message(f"🔧 Startup parameters: {self.args}", to_slack=False)
-        self.log_message(f"📁 Configuration loaded from: {self.args.config}", to_slack=False)
+        startup_info = {
+            "version": self.VERSION,
+            "startup_parameters": vars(self.args),
+            "config_file": self.args.config,
+            "trading_pairs": self.config.get("PAIRS", []),
+            "total_budget": self.config.get("TOTAL_BUDGET", "N/A"),
+            "trading_period_hours": self.config.get("TRADING_PERIOD_HOURS", "N/A"),
+            "daily_target": self.config.get("DAILY_TARGET", "N/A")
+        }
+        self.log_message(f"🚀 Starting ScalpingBot", to_slack=True)
+        self.log_message(f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     def load_lightgbm_model(self):
         try:
@@ -130,7 +139,7 @@ class ScalpingBot:
         except KeyboardInterrupt:
             self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
         finally:
-            self.log_message("✅ ScalpingBot finished trading.", to_slack=True)
+            self.log_message("✅ ScalpingBot finished trading.", to_slack=False)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ScalpingBot with dynamic configuration.")
