@@ -145,10 +145,10 @@ class ScalpingBot:
                 time.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
             self.log_message(
-                "🛑 [{self.bot_name}] ScalpingBot stopped by user.", to_slack=True)
+                f"🛑 ScalpingBot stopped by user.", to_slack=True)
         finally:
             self.log_message(
-                "✅ [{self.bot_name}] ScalpingBot finished trading.", to_slack=True)
+                f"✅ ScalpingBot finished trading.", to_slack=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ScalpingBot with dynamic configuration.")
