@@ -66,15 +66,20 @@ class ScalpingBot:
             self.log_message(f"❗ Error loading LightGBM model: {e}. Falling back to RSI-based decisions.", to_slack=True)
             return None
 
+
     def load_portfolio(self):
-        if os.path.exists("portfolio.json"):
-            with open("portfolio.json", "r") as f:
+        portfolio_path = "./data/portfolio.json"  # Fixed path
+        if os.path.exists(portfolio_path):
+            with open(portfolio_path, "r") as f:
                 self.log_message("✅ Portfolio loaded from file.", to_slack=False)
                 return json.load(f)
         return {}
 
+
     def save_portfolio(self):
-        with open("portfolio.json", "w") as f:
+        portfolio_path = "./data/portfolio.json"  # Fixed path
+        os.makedirs("./data", exist_ok=True)  # Ensure the directory exists
+        with open(portfolio_path, "w") as f:
             json.dump(self.portfolio, f, indent=4)
         self.log_message("✅ Portfolio saved to file.", to_slack=False)
 
