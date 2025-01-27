@@ -1,63 +1,47 @@
 
-from datetime import datetime
-
 class StateManager:
     def __init__(self, pair, logger):
         self.pair = pair
-        self.current_position = None
         self.logger = logger
+        self.position = None  # Holds the current position (if any)
 
     def has_position(self):
-        """Checks if there's an open position for this pair."""
-        return self.current_position is not None
+        return self.position is not None
 
     def buy(self, price, budget, trade_fee_percentage):
-        """Executes a buy operation and stores the position."""
         if self.has_position():
             raise RuntimeError(f"Already holding a position for {self.pair}. Cannot buy again.")
         
-        # Calculate the quantity based on the budget and price
-        quantity = (budget / price) * (1 - trade_fee_percentage / 100)
-        self.current_position = {
+        quantity = budget / price
+        self.position = {
+            "buy_price": price,
             "quantity": quantity,
-            "price": price,
-            "timestamp": datetime.now()
         }
+        self.logger.log(f"🟢 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}")
 
-        # Log the buy operation
-        self.logger.log(
-            f"🟢 Bought {self.pair}: Price=€{price:.2f}, Quantity={quantity:.6f}",
-            to_slack=True
-        )
-
-    def sell(self, price, trade_fee_percentage, minimum_profit_percentage=0.0):
-        """Executes a sell operation and clears the position."""
+    def sell(self, price, trade_fee_percentage):
         if not self.has_position():
             raise RuntimeError(f"No position to sell for {self.pair}.")
+        
+        buy_price = self.position['buy_price']
+        quantity = self.position['quantity']
+        profit = self.calculate_profit(price, trade_fee_percentage)
 
-        # Calculate profit
-        quantity = self.current_position["quantity"]
-        purchase_price = self.current_position["price"]
-        gross_revenue = quantity * price
-        net_revenue = gross_revenue * (1 - trade_fee_percentage / 100)
-        profit = net_revenue - (quantity * purchase_price)
-        profit_percentage = (profit / (quantity * purchase_price)) * 100
-
-        # Check minimum profit threshold
-        if profit_percentage < minimum_profit_percentage:
-            self.logger.log(
-                f"⚠️ Skipping sell for {self.pair}: Profit=€{profit:.2f} ({profit_percentage:.2f}%) is below threshold.",
-                to_slack=True
-            )
-            return None  # Skip the sell action
-
-        # Clear position
-        self.current_position = None
-
-        # Log the sell operation
         self.logger.log(
-            f"🔴 Sold {self.pair}: Price=€{price:.2f}, Profit=€{profit:.2f} ({profit_percentage:.2f}%)",
-            to_slack=True
+            f"🔴 Sold {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}, Profit={profit:.2f}%"
         )
 
-        return profit
+        self.position = None
+
+    def calculate_profit(self, current_price, trade_fee_percentage):
+        if not self.has_position():
+            raise ValueError(f"No position to calculate profit for {self.pair}.")
+
+        buy_price = self.position['buy_price']
+        quantity = self.position['quantity']
+
+        total_cost = buy_price * quantity * (1 + trade_fee_percentage / 100)
+        current_value = current_price * quantity * (1 - trade_fee_percentage / 100)
+
+        profit_percentage = ((current_value - total_cost) / total_cost) * 100
+        return profit_percentage
