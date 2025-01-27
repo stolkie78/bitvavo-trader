@@ -17,6 +17,14 @@ IMAGE=$1
 TAG=$2
 CONFIG=$3
 
+BOTNAMECONF="./config/botname.txt"
+if [ -f "${BOTNAMECONF}" ]; then
+  BOTNAME=$(cat ${BOTNAMECONF})
+else
+  echo "Create a ${BOTNAMECONF} with the name of your bot"
+fi
+
+
 echo "🚀 Starting Docker container '${IMAGE}:${TAG}' with config '${CONFIG}'..."
 
 # Create Docker volume
@@ -29,6 +37,6 @@ echo "🐳 Running Docker container '${IMAGE}_${TAG}_${CONFIG}'..."
 docker run --restart=always --name "${IMAGE}_${TAG}_${CONFIG}" -d \
   -v "$(pwd)/config/:/app/config" \
   -v "${VOLUME_NAME}:/app/data" \
-  "${IMAGE}:${TAG}" --config config/${CONFIG}.json|| handle_error "Failed to start Docker container '${IMAGE}_${TAG}_${CONFIG}'."
+  "${IMAGE}:${TAG}" --config config/${CONFIG}.json --bot-name ${BOTNAME} || handle_error "Failed to start Docker container '${IMAGE}_${TAG}_${CONFIG}'."
 
 echo "✅ Docker container '${IMAGE}_${TAG}_${CONFIG}' is running successfully."

@@ -174,3 +174,4 @@ cython_debug/
 config/
 data/
 log/
+botname.txt

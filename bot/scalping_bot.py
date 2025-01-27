@@ -22,6 +22,7 @@ class ScalpingBot:
         self.state_managers = state_managers
         self.bitvavo = bitvavo
         self.args = args
+        self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]["PORTFOLIO_ALLOCATION"][pair] / 100)
@@ -41,12 +42,16 @@ class ScalpingBot:
         else:
             self.lgb_model = self.load_lightgbm_model()
 
+
     def log_message(self, message: str, to_slack: bool = False):
-        self.logger.log(message, to_console=True, to_slack=to_slack)
+        prefixed_message = f"[{self.bot_name}] {message}"
+        self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
+
 
     def log_startup_parameters(self):
         startup_info = {
             "version": self.VERSION,
+            "bot_name": self.bot_name,
             "startup_parameters": vars(self.args),
             "config_file": self.args.config,
             "trading_pairs": self.config.get("PAIRS", []),
@@ -55,7 +60,8 @@ class ScalpingBot:
             "daily_target": self.config.get("DAILY_TARGET", "N/A")
         }
         self.log_message(f"🚀 Starting ScalpingBot", to_slack=True)
-        self.log_message(f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
+        self.log_message(
+        f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     def load_lightgbm_model(self):
         try:
@@ -148,6 +154,12 @@ if __name__ == "__main__":
         type=str,
         default="scalper.json",
         help="Path to the JSON configuration file (default: scalper.json)"
+    )
+    parser.add_argument(
+        "--bot-name",
+        type=str,
+        required=True,
+        help="Unique name for the bot instance (required)"
     )
     args = parser.parse_args()
 
