@@ -59,9 +59,10 @@ class ScalpingBot:
             "trading_period_hours": self.config.get("TRADING_PERIOD_HOURS", "N/A"),
             "daily_target": self.config.get("DAILY_TARGET", "N/A")
         }
-        self.log_message(f"🚀 Starting ScalpingBot", to_slack=True)
         self.log_message(
-        f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
+            f"🚀 Starting ScalpingBot", to_slack=True)
+        self.log_message(
+            f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     def load_lightgbm_model(self):
         try:
@@ -110,7 +111,7 @@ class ScalpingBot:
                                 )
                                 if profit >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                     self.log_message(
-                                        f"🔴 Selling {pair}. Current RSI={rsi:.2f}, Profit={profit:.2f}%", to_slack=True
+                                        f"🔴 [{self.bot_name}] Selling {pair}. Current RSI={rsi:.2f}, Profit={profit:.2f}%", to_slack=True
                                     )
                                     self.state_managers[pair].sell(
                                         current_price,
@@ -127,7 +128,7 @@ class ScalpingBot:
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             if not self.state_managers[pair].has_position():
                                 self.log_message(
-                                    f"🟢 Buying {pair}. Current RSI={rsi:.2f}", to_slack=True
+                                    f"🟢 [{self.bot_name}] Buying {pair}. Current RSI={rsi:.2f}", to_slack=True
                                 )
                                 self.state_managers[pair].buy(
                                     current_price,
@@ -143,9 +144,11 @@ class ScalpingBot:
 
                 time.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
-            self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
+            self.log_message(
+                "🛑 [{self.bot_name}] ScalpingBot stopped by user.", to_slack=True)
         finally:
-            self.log_message("✅ ScalpingBot finished trading.", to_slack=True)
+            self.log_message(
+                "✅ [{self.bot_name}] ScalpingBot finished trading.", to_slack=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ScalpingBot with dynamic configuration.")
