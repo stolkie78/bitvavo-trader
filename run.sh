@@ -27,8 +27,6 @@ docker volume create "${VOLUME_NAME}" || handle_error "Failed to create Docker v
 # Run the Docker container
 echo "🐳 Running Docker container '${IMAGE}_${TAG}_${CONFIG}'..."
 docker run --restart=always --name "${IMAGE}_${TAG}_${CONFIG}" -d \
-  -v "$(pwd)/config/bitvavo.json:/app/bitvavo.json" \
-  -v "$(pwd)/config/slack.json:/app/slack.json" \
   -v "$(pwd)/config/:/app/config" \
   -v "${VOLUME_NAME}:/app/data" \
   "${IMAGE}:${TAG}" --config config/${CONFIG}.json|| handle_error "Failed to start Docker container '${IMAGE}_${TAG}_${CONFIG}'."
