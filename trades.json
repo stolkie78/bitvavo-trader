@@ -1,0 +1,82 @@
+[
+    {
+        "pair": "BTC-EUR",
+        "type": "buy",
+        "price": 94124.0,
+        "quantity": 0.02119544430750924,
+        "profit": null,
+        "timestamp": "2025-01-27T11:43:22.878350"
+    },
+    {
+        "pair": "ETH-EUR",
+        "type": "buy",
+        "price": 2905.2,
+        "quantity": 0.5150247831474598,
+        "profit": null,
+        "timestamp": "2025-01-27T11:43:23.462635"
+    },
+    {
+        "pair": "XRP-EUR",
+        "type": "buy",
+        "price": 2.6269,
+        "quantity": 189.86257565952263,
+        "profit": null,
+        "timestamp": "2025-01-27T11:43:24.093940"
+    },
+    {
+        "pair": "ADA-EUR",
+        "type": "buy",
+        "price": 0.83175,
+        "quantity": 299.819657348963,
+        "profit": null,
+        "timestamp": "2025-01-27T11:43:24.681267"
+    },
+    {
+        "pair": "BNB-EUR",
+        "type": "buy",
+        "price": 615.97,
+        "quantity": 1.2145477864181697,
+        "profit": null,
+        "timestamp": "2025-01-27T11:43:56.704526"
+    },
+    {
+        "pair": "ADA-EUR",
+        "type": "buy",
+        "price": 0.83398,
+        "quantity": 299.01796206144036,
+        "profit": null,
+        "timestamp": "2025-01-27T11:49:15.293471"
+    },
+    {
+        "pair": "BTC-EUR",
+        "type": "buy",
+        "price": 94132.0,
+        "quantity": 0.02119364296944716,
+        "profit": null,
+        "timestamp": "2025-01-27T11:49:25.872626"
+    },
+    {
+        "pair": "ETH-EUR",
+        "type": "buy",
+        "price": 2904.7,
+        "quantity": 0.5151134368437361,
+        "profit": null,
+        "timestamp": "2025-01-27T11:49:26.404421"
+    },
+    {
+        "pair": "XRP-EUR",
+        "type": "buy",
+        "price": 2.6351,
+        "quantity": 189.27175439262268,
+        "profit": null,
+        "timestamp": "2025-01-27T11:49:27.030851"
+    },
+    {
+        "pair": "BNB-EUR",
+        "type": "buy",
+        "price": 616.29,
+        "quantity": 1.2139171493939545,
+        "profit": null,
+        "timestamp": "2025-01-27T11:50:20.517604"
+    }
+]

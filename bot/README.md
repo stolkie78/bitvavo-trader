@@ -1,162 +1,167 @@
 
 # Bitvavo Scalping Bot
 
-The **Bitvavo Scalping Bot** is an automated cryptocurrency trading bot designed to operate on the Bitvavo platform. The bot leverages technical indicators such as RSI and integrates AI models like LightGBM to make buying and selling decisions. It supports features like portfolio rebalancing, stop-loss settings, and Slack notifications for trade updates.
-
----
+The Bitvavo Scalping Bot is an automated cryptocurrency trading bot designed to execute rapid buy and sell operations based on predefined conditions such as RSI thresholds, profit targets, and LightGBM-based AI predictions. This bot is capable of tracking multiple cryptocurrency pairs and includes features like trade logging, restartable states, and Slack notifications.
 
 ## Features
 
-- **Multi-pair Trading**: Supports trading multiple pairs simultaneously.
-- **Daily Target**: Stops trading once a specified profit target is reached.
-- **Stop-Loss with Retry Count**: Prevents excessive losses by enforcing stop-loss limits with configurable retries.
-- **AI Model Integration**: Utilizes LightGBM for advanced decision-making.
-- **Portfolio Rebalancing**: Ensures the portfolio aligns with predefined allocations at regular intervals.
-- **Slack Notifications**: Sends real-time updates for trade activities.
-- **Logging**: Detailed logs for debugging and monitoring.
+- **Real-time Trading:** Executes buy/sell actions based on RSI and other indicators.
+- **Restartable State:** Keeps track of open positions and portfolio in JSON files to ensure continuity after a restart.
+- **AI Predictions:** Uses LightGBM to predict potential market trends for informed decisions.
+- **Trade Logging:** Logs all trades (buy/sell) and states to JSON files for later analysis.
+- **Slack Notifications:** Sends updates about trades, errors, and other significant events to Slack.
+- **Configurable Parameters:** All thresholds and parameters are configurable through JSON files.
 
----
+## File Structure
+
+```
+bitvavo-scalper/
+├── bot/
+│   ├── scalping_bot.py        # Main bot script
+│   ├── state_manager.py       # Manages trading state and positions
+│   ├── trading_utils.py       # Utility functions for trading
+│   ├── config_loader.py       # Handles loading and validation of configuration files
+│   ├── logging_facility.py    # Handles console and Slack logging
+├── config/
+│   ├── bitvavo.json           # API credentials and general settings
+│   ├── slack.json             # Slack webhook configuration
+│   ├── top_5_crypto_config.json # Example configuration for top 5 cryptos
+│   ├── top_10_meme_config.json  # Example configuration for 10 meme coins
+├── data/
+│   ├── trades.json            # Logs all trades in JSON format
+│   ├── portfolio.json         # Stores current portfolio state
+├── README.md                  # Detailed documentation
+├── Dockerfile                 # Dockerfile for containerization
+├── requirements.txt           # Python dependencies
+├── run.sh                     # Script to start the bot
+├── build.sh                   # Script to build Docker images
+```
+
+## State Management
+
+The bot maintains a restartable state by storing:
+1. **Trades:** Logged in `data/trades.json` for every buy/sell action.
+2. **Portfolio:** Stored in `data/portfolio.json` to keep track of open positions.
+
+These files allow the bot to resume trading without losing its current portfolio or trade history.
 
 ## Configuration
 
-The bot is configured using a JSON file. Below is an explanation of the available parameters:
+### General Configuration Parameters
 
-### General Settings
+| Parameter                  | Description                                            |
+|----------------------------|--------------------------------------------------------|
+| `PAIRS`                    | List of trading pairs (e.g., `BTC-EUR`, `ETH-EUR`)     |
+| `RSI_BUY_THRESHOLD`        | RSI value below which the bot considers buying         |
+| `RSI_SELL_THRESHOLD`       | RSI value above which the bot considers selling        |
+| `TRADE_FEE_PERCENTAGE`     | Fee percentage applied to each trade                   |
+| `DAILY_TARGET`             | Daily profit target; bot stops trading upon reaching it|
+| `SLACK_ENABLED`            | Enables/disables Slack notifications                  |
+| `MODEL_ENABLED`            | Enables/disables AI-based trading                     |
 
-| Parameter                 | Description                                                                                   | Example             |
-|---------------------------|-----------------------------------------------------------------------------------------------|---------------------|
-| `BOT_NAME`                | Name of the bot for identification.                                                          | `"TOP5_SCALPING_BOT"` |
-| `PAIRS`                   | List of trading pairs to operate on.                                                         | `["BTC-EUR", "ETH-EUR"]` |
-| `TOTAL_BUDGET`            | Total budget for the bot, distributed across pairs.                                          | `5000.0`            |
-| `DAILY_TARGET`            | Profit target in EUR. The bot stops trading upon reaching this target.                       | `50.0`              |
-| `TRADING_PERIOD_HOURS`    | Duration (in hours) the bot will trade before resetting.                                      | `24`                |
-| `CHECK_INTERVAL`          | Time interval (in seconds) between trading cycles.                                           | `10`                |
+### Example Config: `top_5_crypto_config.json`
+```json
+{
+    "PAIRS": ["BTC-EUR", "ETH-EUR", "BNB-EUR", "XRP-EUR", "ADA-EUR"],
+    "RSI_BUY_THRESHOLD": 30,
+    "RSI_SELL_THRESHOLD": 70,
+    "TRADE_FEE_PERCENTAGE": 0.25,
+    "DAILY_TARGET": 50,
+    "SLACK_ENABLED": true,
+    "MODEL_ENABLED": true
+}
+```
 
-### Technical Settings
+### Slack Configuration: `slack.json`
+```json
+{
+    "WEBHOOK_URL": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK"
+}
+```
 
-| Parameter                 | Description                                                                                   | Example             |
-|---------------------------|-----------------------------------------------------------------------------------------------|---------------------|
-| `WINDOW_SIZE`             | Number of price points used for RSI calculation.                                              | `3`                 |
-| `RETURN_THRESHOLD`        | Threshold for ROI (percentage) to trigger rebalancing or logging.                             | `25.0`              |
-| `TRADE_FEE_PERCENTAGE`    | Fee percentage for trades on the platform.                                                    | `0.25`              |
-| `MINIMUM_PROFIT_PERCENTAGE` | Minimum profit percentage required for a sell operation.                                    | `1.0`               |
-| `STOP_LOSS`               | Maximum loss percentage allowed before triggering a stop-loss.                                | `-5.0`              |
-| `STOP_LOSS_RETRY_COUNT`   | Number of retries before enforcing a stop-loss.                                               | `3`                 |
-| `BUY_THRESHOLD`           | RSI value below which the bot decides to buy.                                                 | `30.0`              |
-| `SELL_THRESHOLD`          | RSI value above which the bot decides to sell.                                                | `70.0`              |
+### API Configuration: `bitvavo.json`
+```json
+{
+    "API_KEY": "your_api_key",
+    "API_SECRET": "your_api_secret",
+    "API_URL": "https://api.bitvavo.com/v2"
+}
+```
 
-### AI Model Settings
-
-| Parameter                 | Description                                                                                   | Example             |
-|---------------------------|-----------------------------------------------------------------------------------------------|---------------------|
-| `USE_LIGHTGBM`            | Enables LightGBM for decision-making if `true`.                                               | `true`              |
-| `LIGHTGBM_MODEL_PATH`     | Path to the pre-trained LightGBM model.                                                       | `"./models/lightgbm_model.txt"` |
-
-### Rebalancing Settings
-
-| Parameter                 | Description                                                                                   | Example             |
-|---------------------------|-----------------------------------------------------------------------------------------------|---------------------|
-| `REBALANCE_SETTINGS.ENABLED` | Enables portfolio rebalancing.                                                             | `true`              |
-| `REBALANCE_SETTINGS.REBALANCE_INTERVAL_HOURS` | Interval (in hours) for rebalancing.                                      | `24`                |
-| `REBALANCE_SETTINGS.REBALANCE_THRESHOLD_PERCENT` | Percentage deviation allowed before triggering rebalancing.             | `10.0`              |
-| `REBALANCE_SETTINGS.PORTFOLIO_ALLOCATION` | Portfolio allocation for each pair as percentages.                       | `{ "BTC-EUR": 40, "ETH-EUR": 30 }` |
-
-### Logging and Notifications
-
-| Parameter                 | Description                                                                                   | Example             |
-|---------------------------|-----------------------------------------------------------------------------------------------|---------------------|
-| `LOGGING.LOG_TO_FILE`     | Enables logging to a file if `true`.                                                         | `true`              |
-| `LOGGING.FILE_PATH`       | Path to the log file.                                                                         | `"./logs/bot.log"`  |
-| `NOTIFICATIONS.NOTIFY_ON_TRADE` | Sends notifications for trade activities.                                               | `true`              |
-| `NOTIFICATIONS.NOTIFY_ON_REBALANCE` | Sends notifications for rebalancing events.                                         | `true`              |
-
----
-
-## Installation
+## How to Use
 
 ### Prerequisites
 
-- Python 3.7 - 3.11
-- Bitvavo API account with API key and secret.
+1. Install Docker and Python (if not already installed).
+2. Install necessary OS packages for Python libraries:
+   ```bash
+   apt-get update && apt-get install -y build-essential libssl-dev libffi-dev python3-dev
+   ```
+3. Install Python dependencies using `requirements.txt`:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-### Python Dependencies
+### Running the Bot
 
-Install the required Python modules:
-```bash
-pip install -r requirements.txt
-```
-
-### OS Dependencies
-
-For systems using LightGBM, ensure OpenMP is installed. On macOS, run:
-```bash
-brew install libomp
-```
-
----
-
-## Usage
-
-### Starting the Bot
-
-Run the bot with a specified configuration file:
+#### Locally
 ```bash
 python bot/scalping_bot.py --config config/top_5_crypto_config.json
 ```
 
-### Example Configuration File
+#### With Docker
+1. Build the Docker image:
+   ```bash
+   ./build.sh bitvavo-scalper latest
+   ```
+2. Run the container:
+   ```bash
+   ./run.sh bitvavo-scalper latest top_5_crypto_config
+   ```
 
+## Trade and Portfolio Logging
+
+- **Trades:** Every trade is logged in `data/trades.json`. Example:
+```json
+[
+    {
+        "pair": "BTC-EUR",
+        "type": "buy",
+        "price": 93830.0,
+        "quantity": 0.0212,
+        "profit": null,
+        "timestamp": "2025-01-27T12:03:47.498396"
+    }
+]
+```
+
+- **Portfolio:** The current portfolio state is logged in `data/portfolio.json`. Example:
 ```json
 {
-    "BOT_NAME": "TOP5_SCALPING_BOT",
-    "PAIRS": ["BTC-EUR", "ETH-EUR", "BNB-EUR", "XRP-EUR", "ADA-EUR"],
-    "TOTAL_BUDGET": 5000.0,
-    "DAILY_TARGET": 50.0,
-    "TRADING_PERIOD_HOURS": 24,
-    "CHECK_INTERVAL": 10,
-    "WINDOW_SIZE": 3,
-    "RETURN_THRESHOLD": 25.0,
-    "TRADE_FEE_PERCENTAGE": 0.25,
-    "MINIMUM_PROFIT_PERCENTAGE": 1.0,
-    "STOP_LOSS": -5.0,
-    "STOP_LOSS_RETRY_COUNT": 3,
-    "BUY_THRESHOLD": 30.0,
-    "SELL_THRESHOLD": 70.0,
-    "USE_LIGHTGBM": true,
-    "LIGHTGBM_MODEL_PATH": "./models/lightgbm_model.txt",
-    "REBALANCE_SETTINGS": {
-        "ENABLED": true,
-        "REBALANCE_INTERVAL_HOURS": 24,
-        "REBALANCE_THRESHOLD_PERCENT": 10.0,
-        "PORTFOLIO_ALLOCATION": {
-            "BTC-EUR": 40,
-            "ETH-EUR": 30,
-            "BNB-EUR": 15,
-            "XRP-EUR": 10,
-            "ADA-EUR": 5
-        }
-    },
-    "LOGGING": {
-        "LOG_TO_FILE": true,
-        "FILE_PATH": "./logs/top5_scalping_bot.log"
-    },
-    "NOTIFICATIONS": {
-        "NOTIFY_ON_TRADE": true,
-        "NOTIFY_ON_REBALANCE": true
-    }
+    "BTC-EUR": {"price": 93830.0, "quantity": 0.0212, "timestamp": "2025-01-27T12:03:47.498396"}
 }
 ```
 
+## Additional Features
+
+- **Slack Notifications:**
+  - Buy/Sell actions, errors, and daily summaries are sent to a Slack channel if `SLACK_ENABLED` is true.
+- **AI Predictions:**
+  - If `MODEL_ENABLED` is true, the bot uses LightGBM for predicting buy/sell opportunities.
+- **Restartable Trading:**
+  - The bot resumes from its last state using `portfolio.json`.
+
+## FAQ
+
+1. **What happens if the bot crashes?**
+   - The bot resumes trading using the latest `portfolio.json` file.
+2. **Can I use custom RSI thresholds?**
+   - Yes, update the `RSI_BUY_THRESHOLD` and `RSI_SELL_THRESHOLD` in the config file.
+
+## Future Enhancements
+
+- Support for additional technical indicators.
+- Enhanced AI model training with historical data.
+
 ---
-
-## Development Notes
-
-- Ensure the configuration file matches your trading preferences.
-- Regularly monitor logs and adjust thresholds for optimal performance.
-- Rebalance settings are crucial for maintaining portfolio integrity.
-
----
-
-## Disclaimer
-
-This bot is provided for educational purposes. Use it at your own risk. Ensure compliance with local regulations and perform adequate testing before deploying the bot in live environments.
+**Note:** Use this bot responsibly and only trade with funds you can afford to lose. Cryptocurrency trading involves significant risk.

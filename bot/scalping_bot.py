@@ -14,7 +14,7 @@ import argparse
 import json
 
 class ScalpingBot:
-    VERSION = "0.1.2"  # Updated version with enhanced logic and debugging
+    VERSION = "0.1.3"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -28,6 +28,9 @@ class ScalpingBot:
             for pair in self.config["PAIRS"]
         }
         self.end_time = datetime.now() + timedelta(hours=self.config["TRADING_PERIOD_HOURS"])
+
+        # Load portfolio if it exists
+        self.portfolio = self.load_portfolio()
 
         # Log startup parameters
         self.log_startup_parameters()
@@ -63,13 +66,17 @@ class ScalpingBot:
             self.log_message(f"❗ Error loading LightGBM model: {e}. Falling back to RSI-based decisions.", to_slack=True)
             return None
 
-    def price_dropped_significantly(self, current_price, price_history, drop_threshold):
-        if len(price_history) < 2:
-            return False
+    def load_portfolio(self):
+        if os.path.exists("portfolio.json"):
+            with open("portfolio.json", "r") as f:
+                self.log_message("✅ Portfolio loaded from file.", to_slack=False)
+                return json.load(f)
+        return {}
 
-        previous_price = price_history[-2]
-        price_change = (current_price - previous_price) / previous_price * 100
-        return price_change <= -drop_threshold
+    def save_portfolio(self):
+        with open("portfolio.json", "w") as f:
+            json.dump(self.portfolio, f, indent=4)
+        self.log_message("✅ Portfolio saved to file.", to_slack=False)
 
     def run(self):
         self.log_message(f"📊 Trading started at {datetime.now()}")
@@ -92,13 +99,13 @@ class ScalpingBot:
                                 )
                                 if profit >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                     self.log_message(
-                                        f"🔴 Selling {pair}. Current RSI={rsi:.2f}, Profit={profit:.2f}%",
-                                        to_slack=True
+                                        f"🔴 Selling {pair}. Current RSI={rsi:.2f}, Profit={profit:.2f}%", to_slack=True
                                     )
                                     self.state_managers[pair].sell(
                                         current_price,
                                         self.config["TRADE_FEE_PERCENTAGE"]
                                     )
+                                    self.save_portfolio()  # Update portfolio after sell
                                 else:
                                     self.log_message(
                                         f"⚠️ Skipping sell for {pair}: Profit {profit:.2f}% below threshold.",
@@ -108,27 +115,15 @@ class ScalpingBot:
                         # Buying logic
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             if not self.state_managers[pair].has_position():
-                                if self.price_dropped_significantly(
-                                    current_price, self.price_history[pair], self.config["PRICE_DROP_THRESHOLD"]
-                                ):
-                                    self.log_message(
-                                        f"🟢 Buying {pair}. Current RSI={rsi:.2f}, Price dropped significantly.",
-                                        to_slack=True
-                                    )
-                                    self.state_managers[pair].buy(
-                                        current_price,
-                                        self.pair_budgets[pair],
-                                        self.config["TRADE_FEE_PERCENTAGE"]
-                                    )
-                                else:
-                                    self.log_message(
-                                        f"⚠️ Skipping buy for {pair}: Price drop not significant.",
-                                        to_slack=False
-                                    )
-
-                    # Debugging information
-                    if self.config.get("DEBUG_MODE", False):
-                        self.log_message(f"🔍 Debug info: {pair} -> Price={current_price:.2f}, RSI={rsi:.2f}")
+                                self.log_message(
+                                    f"🟢 Buying {pair}. Current RSI={rsi:.2f}", to_slack=True
+                                )
+                                self.state_managers[pair].buy(
+                                    current_price,
+                                    self.pair_budgets[pair],
+                                    self.config["TRADE_FEE_PERCENTAGE"]
+                                )
+                                self.save_portfolio()  # Update portfolio after buy
 
                     # Update price history
                     self.price_history[pair].append(current_price)
@@ -139,7 +134,7 @@ class ScalpingBot:
         except KeyboardInterrupt:
             self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
         finally:
-            self.log_message("✅ ScalpingBot finished trading.", to_slack=False)
+            self.log_message("✅ ScalpingBot finished trading.", to_slack=True)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ScalpingBot with dynamic configuration.")
