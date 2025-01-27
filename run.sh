@@ -1,18 +1,36 @@
 #!/bin/bash
-#
-# Shell script to run a Docker container with a specified config
-#
-# Usage: ./run_$[IMAGE}.sh <config_name>
-#
-IMAGE=${1}
-TAG=${2}
-CONFIG=${3}
 
-docker volume create ${IMAGE}_volume
+# Function to display error messages and exit
+handle_error() {
+  echo "❌ Error: $1"
+  exit 1
+}
 
-docker run --restart=always --name ${IMAGE}_${TAG}_${CONFIG} -d \
-  -v $(pwd)/config/bitvavo.json:/app/bitvavo.json \
-  -v $(pwd)/config/slack.json:/app/slack.json \
-  -v $(pwd)/config/${CONFIG}.json:/config/scalper.json \
-  -v ${IMAGE}_volume:/app/data \
-  ${IMAGE}:${TAG}
+# Validate input arguments
+if [ "$#" -ne 3 ]; then
+  echo "Usage: $0 <image_name> <tag> <config_name>"
+  echo "Example: ./run_scalper.sh bitvavo-scalper 0.1.0 top5_config"
+  exit 1
+fi
+
+IMAGE=$1
+TAG=$2
+CONFIG=$3
+
+echo "🚀 Starting Docker container '${IMAGE}:${TAG}' with config '${CONFIG}'..."
+
+# Create Docker volume
+VOLUME_NAME="${IMAGE}_volume"
+echo "🔄 Creating Docker volume '${VOLUME_NAME}' (if not exists)..."
+docker volume create "${VOLUME_NAME}" || handle_error "Failed to create Docker volume '${VOLUME_NAME}'."
+
+# Run the Docker container
+echo "🐳 Running Docker container '${IMAGE}_${TAG}_${CONFIG}'..."
+docker run --restart=always --name "${IMAGE}_${TAG}_${CONFIG}" -d \
+  -v "$(pwd)/config/bitvavo.json:/app/bitvavo.json" \
+  -v "$(pwd)/config/slack.json:/app/slack.json" \
+  -v "$(pwd)/config/${CONFIG}.json:/config/scalper.json" \
+  -v "${VOLUME_NAME}:/app/data" \
+  "${IMAGE}:${TAG}" || handle_error "Failed to start Docker container '${IMAGE}_${TAG}_${CONFIG}'."
+
+echo "✅ Docker container '${IMAGE}_${TAG}_${CONFIG}' is running successfully."
