@@ -26,8 +26,7 @@ class ScalpingBot:
         self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
-            pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]
-                   ["PORTFOLIO_ALLOCATION"][pair] / 100)
+            pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
         self.end_time = datetime.now(
@@ -84,8 +83,7 @@ class ScalpingBot:
                         self.price_history[pair], self.config["WINDOW_SIZE"])
 
                     if rsi is not None:
-                        self.log_message(f"✅ Current price for {pair}: {
-                                         current_price:.2f} EUR, RSI={rsi:.2f}")
+                        self.log_message(f"✅ Current price for {pair}: {current_price:.2f} EUR, RSI={rsi:.2f}")
 
                         # Selling logic
                         if rsi >= self.config["SELL_THRESHOLD"]:
