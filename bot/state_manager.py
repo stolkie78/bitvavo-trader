@@ -10,7 +10,7 @@ class StateManager:
         self.logger = logger
         self.bitvavo = bitvavo
         self.demo_mode = demo_mode
-        self.position = None
+        self.position = None  # Ensure only one position per crypto
         self.data_dir = "data"
         self.trades_file = os.path.join(self.data_dir, "trades.json")
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
@@ -49,23 +49,22 @@ class StateManager:
                         pair}. Returning original quantity.", to_console=True)
         return quantity
 
-
     def load_portfolio(self):
         """
-        Laad de portfolio-inhoud vanuit een JSON-bestand.
+        Load the portfolio content from a JSON file.
         """
         if os.path.exists(self.portfolio_file):
             with open(self.portfolio_file, "r") as f:
-                self.logger.log(f"✅ Portfolio loaded from file.", to_console=True)
+                self.logger.log(
+                    f"✅ Portfolio loaded from file.", to_console=True)
                 return json.load(f)
         self.logger.log(
             f"[STATEMANAGER] ℹ️ No portfolio file found. Starting with an empty portfolio.", to_console=True)
         return {}
 
-
     def save_portfolio(self):
         """
-        Sla de portfolio-inhoud op in een JSON-bestand.
+        Save the portfolio content to a JSON file.
         """
         with open(self.portfolio_file, "w") as f:
             json.dump(self.portfolio, f, indent=4)
@@ -73,6 +72,10 @@ class StateManager:
                         self.portfolio_file}.", to_console=True)
 
     def buy(self, price, budget, fee_percentage):
+        if self.has_position():
+            self.logger.log(f"[STATEMANAGER] ❌ Cannot open a new position for {self.pair}. Position already exists.", to_console=True)
+            return
+
         quantity = (budget / price) * (1 - fee_percentage / 100)
         quantity = self.adjust_quantity(self.bitvavo, self.pair, quantity)
 
@@ -86,11 +89,13 @@ class StateManager:
         )
 
         if order.get("status") == "demo":
-            self.logger.log(f"🟢 [DEMO] Simulated buy for {self.pair}: Quantity={quantity:.6f}", to_console=True, to_slack=False)
+            self.logger.log(f"🟢 [DEMO] Simulated buy for {self.pair}: Quantity={
+                            quantity:.6f}", to_console=True, to_slack=False)
         elif "orderId" in order:
-            self.position = {"price": price, "quantity": quantity,"timestamp": datetime.now().isoformat()}
+            self.position = {"price": price, "quantity": quantity,
+                             "timestamp": datetime.now().isoformat()}
             self.portfolio[self.pair] = self.position
-            self.save_portfolio()  # Sla de bijgewerkte portfolio op
+            self.save_portfolio()  # Save the updated portfolio
             self.logger.log(f"[STATEMANAGER] 🟢 Bought {self.pair}: Price={
                             price:.2f}, Quantity={quantity:.6f}", to_console=True, to_slack=False)
         else:
@@ -99,8 +104,9 @@ class StateManager:
 
     def sell(self, price, fee_percentage):
         if not self.position:
-            raise RuntimeError(
-                f"[STATEMANAGER] No position to sell for {self.pair}.")
+            self.logger.log(f"[STATEMANAGER] ❌ No position to sell for {
+                            self.pair}.", to_console=True)
+            return
 
         quantity = self.position["quantity"]
         quantity = self.adjust_quantity(self.bitvavo, self.pair, quantity)
@@ -125,7 +131,7 @@ class StateManager:
             self.position = None
             if self.pair in self.portfolio:
                 del self.portfolio[self.pair]
-            self.save_portfolio() 
+            self.save_portfolio()
             self.logger.log(f"[STATEMANAGER]  🔴 Sold {self.pair}: Price={
                             price:.2f}, Profit={profit:.2f}", to_console=True, to_slack=False)
         else:
