@@ -1,6 +1,6 @@
 from python_bitvavo_api.bitvavo import Bitvavo
 
-def initialize_bitvavo(config: dict) -> Bitvavo:
+def bitvavo(config: dict) -> Bitvavo:
     """
     Initializes the Bitvavo client with the given configuration.
 

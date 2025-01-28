@@ -5,7 +5,7 @@ import pandas as pd
 from bot.config_loader import ConfigLoader
 from bot.state_manager import StateManager
 from bot.trading_utils import TradingUtils
-from bot.bitvavo_client import initialize_bitvavo
+from bot.bitvavo_client import bitvavo
 from bot.logging_facility import LoggingFacility
 import os
 import time
@@ -169,11 +169,10 @@ if __name__ == "__main__":
     config_path = os.path.abspath(args.config)
     if not os.path.exists(config_path):
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
-
+    bitvavo = bitvavo(ConfigLoader.load_config("bitvavo.json"))
     config = ConfigLoader.load_config(config_path)
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
-    state_managers = {pair: StateManager(pair, logger) for pair in config["PAIRS"]}
-    bitvavo = initialize_bitvavo(ConfigLoader.load_config("bitvavo.json"))
+    state_managers = {pair: StateManager(pair, logger, bitvavo, demo_mode=config.get("DEMO_MODE", False)) for pair in config["PAIRS"]}
 
     bot = ScalpingBot(config, logger, state_managers, bitvavo, args)
     bot.run()
