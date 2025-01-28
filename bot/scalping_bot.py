@@ -13,8 +13,9 @@ from datetime import datetime, timedelta
 import argparse
 import json
 
+
 class ScalpingBot:
-    VERSION = "0.1.4"
+    VERSION = "0.1.5"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -25,13 +26,12 @@ class ScalpingBot:
         self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
-            pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]["PORTFOLIO_ALLOCATION"][pair] / 100)
+            pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]
+                   ["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
-        self.end_time = datetime.now() + timedelta(hours=self.config["TRADING_PERIOD_HOURS"])
-
-        # Load portfolio if it exists
-        self.portfolio = self.load_portfolio()
+        self.end_time = datetime.now(
+        ) + timedelta(hours=self.config["TRADING_PERIOD_HOURS"])
 
         # Log startup parameters
         self.log_startup_parameters()
@@ -42,11 +42,9 @@ class ScalpingBot:
         else:
             self.lgb_model = self.load_lightgbm_model()
 
-
     def log_message(self, message: str, to_slack: bool = False):
         prefixed_message = f"[{self.bot_name}] {message}"
         self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
-
 
     def log_startup_parameters(self):
         startup_info = {
@@ -59,36 +57,19 @@ class ScalpingBot:
             "trading_period_hours": self.config.get("TRADING_PERIOD_HOURS", "N/A"),
             "daily_target": self.config.get("DAILY_TARGET", "N/A")
         }
-        self.log_message(
-            f"🚀 Starting ScalpingBot", to_slack=True)
-        self.log_message(
-            f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
+        self.log_message(f"🚀 Starting ScalpingBot", to_slack=True)
+        self.log_message(f"📊 Startup Info: {json.dumps(
+            startup_info, indent=2)}", to_slack=True)
 
     def load_lightgbm_model(self):
         try:
             model = lgb.Booster(model_file=self.config["LIGHTGBM_MODEL_PATH"])
-            self.log_message("✅ LightGBM model loaded successfully.", to_slack=False)
+            self.log_message(
+                "✅ LightGBM model loaded successfully.", to_slack=False)
             return model
         except Exception as e:
             self.log_message(f"❗ Error loading LightGBM model: {e}. Falling back to RSI-based decisions.", to_slack=True)
             return None
-
-
-    def load_portfolio(self):
-        portfolio_path = "./data/portfolio.json"  # Fixed path
-        if os.path.exists(portfolio_path):
-            with open(portfolio_path, "r") as f:
-                self.log_message("✅ Portfolio loaded from file.", to_slack=False)
-                return json.load(f)
-        return {}
-
-
-    def save_portfolio(self):
-        portfolio_path = "./data/portfolio.json"  # Fixed path
-        os.makedirs("./data", exist_ok=True)  # Ensure the directory exists
-        with open(portfolio_path, "w") as f:
-            json.dump(self.portfolio, f, indent=4)
-        self.log_message("✅ Portfolio saved to file.", to_slack=False)
 
     def run(self):
         self.log_message(f"📊 Trading started at {datetime.now()}")
@@ -97,11 +78,14 @@ class ScalpingBot:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
                 self.log_message(f"📈 Current budget per pair: {self.pair_budgets}")
                 for pair in self.config["PAIRS"]:
-                    current_price = TradingUtils.fetch_current_price(self.bitvavo, pair)
-                    rsi = TradingUtils.calculate_rsi(self.price_history[pair], self.config["WINDOW_SIZE"])
+                    current_price = TradingUtils.fetch_current_price(
+                        self.bitvavo, pair)
+                    rsi = TradingUtils.calculate_rsi(
+                        self.price_history[pair], self.config["WINDOW_SIZE"])
 
                     if rsi is not None:
-                        self.log_message(f"✅ Current price for {pair}: {current_price:.2f} EUR, RSI={rsi:.2f}")
+                        self.log_message(f"✅ Current price for {pair}: {
+                                         current_price:.2f} EUR, RSI={rsi:.2f}")
 
                         # Selling logic
                         if rsi >= self.config["SELL_THRESHOLD"]:
@@ -117,10 +101,10 @@ class ScalpingBot:
                                         current_price,
                                         self.config["TRADE_FEE_PERCENTAGE"]
                                     )
-                                    self.save_portfolio()  # Update portfolio after sell
                                 else:
                                     self.log_message(
-                                        f"⚠️ Skipping sell for {pair}: Profit {profit:.2f}% below threshold.",
+                                        f"⚠️ Skipping sell for {pair}: Profit {
+                                            profit:.2f}% below threshold.",
                                         to_slack=False
                                     )
 
@@ -135,7 +119,6 @@ class ScalpingBot:
                                     self.pair_budgets[pair],
                                     self.config["TRADE_FEE_PERCENTAGE"]
                                 )
-                                self.save_portfolio()  # Update portfolio after buy
 
                     # Update price history
                     self.price_history[pair].append(current_price)
@@ -144,14 +127,14 @@ class ScalpingBot:
 
                 time.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
-            self.log_message(
-                f"🛑 ScalpingBot stopped by user.", to_slack=True)
+            self.log_message(f"🛑 ScalpingBot stopped by user.", to_slack=True)
         finally:
-            self.log_message(
-                f"✅ ScalpingBot finished trading.", to_slack=True)
+            self.log_message(f"✅ ScalpingBot finished trading.", to_slack=True)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ScalpingBot with dynamic configuration.")
+    parser = argparse.ArgumentParser(
+        description="ScalpingBot with dynamic configuration.")
     parser.add_argument(
         "--config",
         type=str,
@@ -172,7 +155,8 @@ if __name__ == "__main__":
     bitvavo = bitvavo(ConfigLoader.load_config("bitvavo.json"))
     config = ConfigLoader.load_config(config_path)
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
-    state_managers = {pair: StateManager(pair, logger, bitvavo, demo_mode=config.get("DEMO_MODE", False)) for pair in config["PAIRS"]}
+    state_managers = {pair: StateManager(pair, logger, bitvavo, demo_mode=config.get(
+        "DEMO_MODE", False)) for pair in config["PAIRS"]}
 
     bot = ScalpingBot(config, logger, state_managers, bitvavo, args)
     bot.run()
