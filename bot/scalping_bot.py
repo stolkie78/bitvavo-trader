@@ -1,5 +1,4 @@
 
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
 from bot.config_loader import ConfigLoader
@@ -26,20 +25,12 @@ class ScalpingBot:
         self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
-            pair: (self.config["TOTAL_BUDGET"] * self.config["REBALANCE_SETTINGS"]["PORTFOLIO_ALLOCATION"][pair] / 100)
+            pair: (self.config["TOTAL_BUDGET"] * self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
-        self.end_time = datetime.now(
-        ) + timedelta(hours=self.config["TRADING_PERIOD_HOURS"])
 
         # Log startup parameters
         self.log_startup_parameters()
-
-        # Train or load LightGBM model
-        if self.config.get("TRAIN_MODEL", False):
-            self.lgb_model = self.train_lightgbm_model()
-        else:
-            self.lgb_model = self.load_lightgbm_model()
 
     def log_message(self, message: str, to_slack: bool = False):
         prefixed_message = f"[{self.bot_name}] {message}"
@@ -60,20 +51,10 @@ class ScalpingBot:
         self.log_message(f"📊 Startup Info: {json.dumps(
             startup_info, indent=2)}", to_slack=True)
 
-    def load_lightgbm_model(self):
-        try:
-            model = lgb.Booster(model_file=self.config["LIGHTGBM_MODEL_PATH"])
-            self.log_message(
-                "✅ LightGBM model loaded successfully.", to_slack=False)
-            return model
-        except Exception as e:
-            self.log_message(f"❗ Error loading LightGBM model: {e}. Falling back to RSI-based decisions.", to_slack=True)
-            return None
-
     def run(self):
         self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
-            while datetime.now() < self.end_time:
+            while True:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
                 self.log_message(f"📈 Current budget per pair: {self.pair_budgets}")
                 for pair in self.config["PAIRS"]:
@@ -93,7 +74,7 @@ class ScalpingBot:
                                 )
                                 if profit >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                     self.log_message(
-                                        f"🔴 [{self.bot_name}] Selling {pair}. Current RSI={rsi:.2f}, Profit={profit:.2f}%", to_slack=True
+                                        f"🔴 Selling {pair}. Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit={profit:.2f}%", to_slack=True
                                     )
                                     self.state_managers[pair].sell(
                                         current_price,
@@ -110,7 +91,7 @@ class ScalpingBot:
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             if not self.state_managers[pair].has_position():
                                 self.log_message(
-                                    f"🟢 [{self.bot_name}] Buying {pair}. Current RSI={rsi:.2f}", to_slack=True
+                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, Current RSI={rsi:.2f}", to_slack=True
                                 )
                                 self.state_managers[pair].buy(
                                     current_price,
