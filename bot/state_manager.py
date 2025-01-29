@@ -34,10 +34,10 @@ class StateManager:
                 with open(self.portfolio_file, "r") as f:
                     portfolio = json.load(f)
                     self.logger.log(
-                        f"✅ Portfolio loaded successfully.", to_console=True)
+                        f"👽 Portfolio loaded successfully.", to_console=True)
                     return portfolio
             except Exception as e:
-                self.logger.log(f"❌ Error loading portfolio: {
+                self.logger.log(f"👽❌ Error loading portfolio: {
                                 e}", to_console=True)
         self.logger.log(
             f"ℹ️ No portfolio file found. Starting with an empty portfolio.", to_console=True)
@@ -48,10 +48,10 @@ class StateManager:
         try:
             with open(self.portfolio_file, "w") as f:
                 json.dump(self.portfolio, f, indent=4)
-            self.logger.log(f"✅ Portfolio saved to {
+            self.logger.log(f"👽 Portfolio saved to {
                             self.portfolio_file}.", to_console=True)
         except Exception as e:
-            self.logger.log(f"❌ Error saving portfolio: {e}", to_console=True)
+            self.logger.log(f"👽❌ Error saving portfolio: {e}", to_console=True)
 
     def adjust_quantity(self, pair, quantity):
         """Adjust the quantity to meet market requirements."""
@@ -69,7 +69,7 @@ class StateManager:
     def buy(self, price, budget, fee_percentage):
         """Execute a buy order if no position exists for the pair."""
         if self.has_position():
-            self.logger.log(f"❌ Cannot open a new position for {
+            self.logger.log(f"👽❌ Cannot open a new position for {
                             self.pair}. Position already exists.", to_console=True)
             return
 
@@ -77,7 +77,7 @@ class StateManager:
         quantity = self.adjust_quantity(self.pair, quantity)
 
         if quantity <= 0:
-            self.logger.log(f"❌ Invalid quantity for {self.pair}: {
+            self.logger.log(f"👽❌ Invalid quantity for {self.pair}: {
                             quantity}", to_console=True, to_slack=False)
             return
 
@@ -85,23 +85,23 @@ class StateManager:
             self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
 
         if order.get("status") == "demo":
-            self.logger.log(f"🟢 [DEMO] Simulated buy for {self.pair}: Quantity={
+            self.logger.log(f"👽 [DEMO] Simulated buy for {self.pair}: Quantity={
                             quantity:.6f}", to_console=True, to_slack=False)
         elif "orderId" in order:
             self.position = {"price": price, "quantity": quantity,
-                             "timestamp": datetime.now().isoformat()}
+                            "timestamp": datetime.now().isoformat()}
             self.portfolio[self.pair] = self.position
             self.save_portfolio()
-            self.logger.log(f"🟢 Bought {self.pair}: Price={price:.2f}, Quantity={
+            self.logger.log(f"👽 Bought {self.pair}: Price={price:.2f}, Quantity={
                             quantity:.6f}", to_console=True, to_slack=False)
         else:
-            self.logger.log(f"❌ Failed to execute buy order for {self.pair}: {
+            self.logger.log(f"👽 Failed to execute buy order for {self.pair}: {
                             order}", to_console=True, to_slack=False)
 
     def sell(self, price, fee_percentage):
         """Execute a sell order and remove the position from the portfolio."""
         if not self.has_position():
-            self.logger.log(f"❌ No position to sell for {
+            self.logger.log(f"👽 No position to sell for {
                             self.pair}.", to_console=True)
             return
 
@@ -109,7 +109,7 @@ class StateManager:
         quantity = self.adjust_quantity(self.pair, quantity)
 
         if quantity <= 0:
-            self.logger.log(f"❌ Invalid quantity for {self.pair}: {
+            self.logger.log(f"👽 Invalid quantity for {self.pair}: {
                             quantity}", to_console=True, to_slack=False)
             return
 
@@ -121,17 +121,17 @@ class StateManager:
             self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode)
 
         if order.get("status") == "demo":
-            self.logger.log(f"🔴 [DEMO] Simulated sell for {self.pair}: Quantity={
+            self.logger.log(f"👽 [DEMO] Simulated sell for {self.pair}: Quantity={
                             quantity:.6f}", to_console=True, to_slack=False)
         elif "orderId" in order:
             self.position = None
             if self.pair in self.portfolio:
                 del self.portfolio[self.pair]
             self.save_portfolio()
-            self.logger.log(f"🔴 Sold {self.pair}: Price={price:.2f}, Profit={
+            self.logger.log(f"👽 Sold {self.pair}: Price={price:.2f}, Profit={
                             profit:.2f}", to_console=True, to_slack=False)
         else:
-            self.logger.log(f"❌ Failed to execute sell order for {self.pair}: {
+            self.logger.log(f"👽 Failed to execute sell order for {self.pair}: {
                             order}", to_console=True, to_slack=False)
 
 
@@ -186,4 +186,5 @@ class StateManager:
                 with open(self.trades_file, "w") as f:
                     json.dump(trades, f, indent=4)
         except Exception as e:
-            self.logger.log(f"[STATEMANAGER]❗ Error logging trade: {e}", to_console=True, to_slack=False)
+            self.logger.log(f"👽❗ Error logging trade: {
+                            e}", to_console=True, to_slack=False)
