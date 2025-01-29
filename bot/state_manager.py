@@ -38,8 +38,7 @@ class StateManager:
                         f"👽 Portfolio loaded successfully.", to_console=True)
                     return portfolio
             except Exception as e:
-                self.logger.log(f"👽❌ Error loading portfolio: {
-                                e}", to_console=True)
+                self.logger.log(f"👽❌ Error loading portfolio: {e}", to_console=True)
         self.logger.log(
             f"ℹ️ No portfolio file found. Starting with an empty portfolio.", to_console=True)
         return {}
@@ -111,8 +110,7 @@ class StateManager:
         quantity = self.adjust_quantity(self.pair, quantity)
 
         if quantity <= 0:
-            self.logger.log(f"👽 Invalid quantity for {self.pair}: {
-                            quantity}", to_console=True, to_slack=False)
+            self.logger.log(f"👽 Invalid quantity for {self.pair}: {quantity}", to_console=True, to_slack=False)
             return
 
         cost_basis = self.position["price"] * quantity

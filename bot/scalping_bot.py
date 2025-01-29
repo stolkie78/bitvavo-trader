@@ -22,6 +22,9 @@ class ScalpingBot:
         self.state_managers = state_managers
         self.bitvavo = bitvavo
         self.args = args
+        self.data_dir = "data"
+        self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
+        self.portfolio = self.load_portfolio()
         self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
@@ -31,6 +34,23 @@ class ScalpingBot:
 
         # Log startup parameters
         self.log_startup_parameters()
+
+        # Log portfolio
+        self.logger.log(f"📂 Loaded Portfolio:\n{json.dumps(self.portfolio, indent=4)}", to_console=True)
+
+    def load_portfolio(self):
+        """Load the portfolio content from a JSON file."""
+        if os.path.exists(self.portfolio_file):
+            try:
+                with open(self.portfolio_file, "r") as f:
+                    portfolio = json.load(f)
+                    self.logger.log(
+                        f"Portfolio loaded successfully.", to_console=True)
+                    return portfolio
+            except Exception as e:
+                self.logger.log(
+                    f"👽❌ Error loading portfolio: {e}", to_console=True)
+
 
     def log_message(self, message: str, to_slack: bool = False):
         prefixed_message = f"[{self.bot_name}] {message}"
