@@ -13,6 +13,7 @@ class StateManager:
         self.position = None  # Ensure only one position per crypto
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
+        self.trades_file = os.path.join(self.data_dir, "trades.json")
         self.portfolio = self.load_portfolio()
 
         # Ensure the data directory exists
@@ -91,6 +92,7 @@ class StateManager:
             self.position = {"price": price, "quantity": quantity,
                             "timestamp": datetime.now().isoformat()}
             self.portfolio[self.pair] = self.position
+            self.log_trade("buy", price, quantity)
             self.save_portfolio()
             self.logger.log(f"👽 Bought {self.pair}: Price={price:.2f}, Quantity={
                             quantity:.6f}", to_console=True, to_slack=False)
@@ -124,6 +126,7 @@ class StateManager:
             self.logger.log(f"👽 [DEMO] Simulated sell for {self.pair}: Quantity={
                             quantity:.6f}", to_console=True, to_slack=False)
         elif "orderId" in order:
+            self.log_trade("sell", price, quantity, profit)
             self.position = None
             if self.pair in self.portfolio:
                 del self.portfolio[self.pair]

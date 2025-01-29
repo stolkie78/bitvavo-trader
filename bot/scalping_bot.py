@@ -14,7 +14,7 @@ import json
 
 
 class ScalpingBot:
-    VERSION = "0.1.9"
+    VERSION = "0.1.10"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -44,8 +44,6 @@ class ScalpingBot:
             "config_file": self.args.config,
             "trading_pairs": self.config.get("PAIRS", []),
             "total_budget": self.config.get("TOTAL_BUDGET", "N/A"),
-            "trading_period_hours": self.config.get("TRADING_PERIOD_HOURS", "N/A"),
-            "daily_target": self.config.get("DAILY_TARGET", "N/A")
         }
         self.log_message(f"🚀 Starting ScalpingBot", to_slack=True)
         self.log_message(f"📊 Startup Info: {json.dumps(
