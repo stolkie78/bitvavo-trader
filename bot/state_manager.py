@@ -2,9 +2,11 @@ import json
 from datetime import datetime
 import os
 from bot.trading_utils import TradingUtils
+import threading
 
 
 class StateManager:
+    _lock = threading.Lock()
     def __init__(self, pair, logger, bitvavo, demo_mode=False):
         self.pair = pair
         self.logger = logger
@@ -45,14 +47,16 @@ class StateManager:
         return {}
 
     def save_portfolio(self):
-        """Save the portfolio content to a JSON file."""
-        try:
-            with open(self.portfolio_file, "w") as f:
-                json.dump(self.portfolio, f, indent=4)
-            self.logger.log(f"👽 Portfolio saved to {
-                            self.portfolio_file}.", to_console=True)
-        except Exception as e:
-            self.logger.log(f"👽❌ Error saving portfolio: {e}", to_console=True)
+        """Save the portfolio content to a JSON file with thread safety."""
+        with self._lock:  # Gebruik een lock om meerdere gelijktijdige schrijfbewerkingen te voorkomen
+            try:
+                with open(self.portfolio_file, "w") as f:
+                    json.dump(self.portfolio, f, indent=4)
+                self.logger.log(
+                    f"👽 Portfolio successfully saved to {self.portfolio_file}.", to_console=True)
+            except Exception as e:
+                self.logger.log(
+                    f"👽❌ Error saving portfolio: {e}", to_console=True)
 
     def adjust_quantity(self, pair, quantity):
         """Adjust the quantity to meet market requirements."""
