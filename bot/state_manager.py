@@ -24,9 +24,10 @@ class StateManager:
         if self.pair in self.portfolio:
             self.position = self.portfolio[self.pair]
 
+
     def has_position(self):
-        """Check if a position exists for the pair."""
-        return self.position is not None
+        """Check if a position exists in the portfolio file."""
+        return self.pair in self.portfolio and self.portfolio[self.pair] is not None
 
     def load_portfolio(self):
         """Load the portfolio content from a JSON file."""
@@ -69,8 +70,7 @@ class StateManager:
     def buy(self, price, budget, fee_percentage):
         """Execute a buy order if no position exists for the pair."""
         if self.has_position():
-            self.logger.log(f"👽❌ Cannot open a new position for {
-                            self.pair}. Position already exists.", to_console=True)
+            self.logger.log(f"👽❌ Cannot open a new position for {self.pair}. Position already exists.", to_console=True)
             return
 
         quantity = (budget / price) * (1 - fee_percentage / 100)
