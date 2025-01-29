@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Kopieer de rest van de applicatie
 COPY bot/. bot/
 COPY models/. models/
+COPY tools/. tools/
 
 # Stel een standaard entrypoint in
 ENTRYPOINT ["python", "bot/scalping_bot.py"]
