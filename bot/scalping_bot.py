@@ -14,7 +14,7 @@ import json
 
 
 class ScalpingBot:
-    VERSION = "0.1.11"
+    VERSION = "0.1.13"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
