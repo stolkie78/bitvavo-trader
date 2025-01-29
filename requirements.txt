@@ -1,9 +1,7 @@
 ta
 numpy
 pandas
-lightgbm
 textblob
-scikit-learn
 requests
 python-dotenv
 slack-sdk
