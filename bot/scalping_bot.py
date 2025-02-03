@@ -14,7 +14,7 @@ import json
 
 
 class ScalpingBot:
-    VERSION = "0.1.17"
+    VERSION = "0.1.18"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -32,7 +32,7 @@ class ScalpingBot:
                    self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
-        # Dictionaries om de RSI los van de check_interval bij te houden.
+        # Dictionaries om de RSI los van de CHECK_INTERVAL bij te houden.
         self.last_rsi_update = {pair: None for pair in config["PAIRS"]}
         self.cached_rsi = {pair: None for pair in config["PAIRS"]}
 
@@ -98,7 +98,6 @@ class ScalpingBot:
                         "RSI_INTERVAL", self.config["CHECK_INTERVAL"])
                     last_update = self.last_rsi_update[pair]
                     if last_update is None or (current_time - last_update).total_seconds() >= rsi_interval:
-                        # RSI berekenen in een aparte thread
                         rsi = await asyncio.to_thread(TradingUtils.calculate_rsi, self.price_history[pair], self.config["WINDOW_SIZE"])
                         self.cached_rsi[pair] = rsi
                         self.last_rsi_update[pair] = current_time
@@ -119,7 +118,6 @@ class ScalpingBot:
                                         current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
                                     to_slack=True
                                 )
-                                # Voer de stop loss met retry asynchroon uit (ook hier kan eventueel to_thread gebruikt worden als de functie synchroon is)
                                 await asyncio.to_thread(
                                     self.state_managers[pair].sell_position_with_retry,
                                     position,
@@ -139,13 +137,18 @@ class ScalpingBot:
                         if rsi >= self.config["SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
-                                    profit = self.state_managers[pair].calculate_profit_for_position(
+                                    # Bereken het winstpercentage via de StateManager
+                                    profit_percentage = self.state_managers[pair].calculate_profit_for_position(
                                         pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
                                     )
-                                    if profit >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
+                                    # Bereken de absolute winst in valuta
+                                    absolute_profit = (current_price * pos["quantity"] * (
+                                        1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
+
+                                    if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={
-                                                rsi:.2f}, Price: {current_price:.2f}, Profit={profit:.2f}%",
+                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {
+                                                current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -157,7 +160,7 @@ class ScalpingBot:
                                     else:
                                         self.log_message(
                                             f"⚠️ Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {
-                                                profit:.2f}% below threshold.",
+                                                profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
                                             to_slack=False
                                         )
 
@@ -166,15 +169,19 @@ class ScalpingBot:
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
+                                # Verdeel het totaal toegewezen budget voor dit paar over het maximaal aantal trades
+                                investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, Current RSI={
-                                        rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades})",
+                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {
+                                        len(open_positions)} (max allowed: {max_trades}). "
+                                    f"Investeringsbedrag per trade: {
+                                        investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
                                     self.state_managers[pair].buy,
                                     current_price,
-                                    self.pair_budgets[pair],
+                                    investment_per_trade,
                                     self.config["TRADE_FEE_PERCENTAGE"]
                                 )
                             else:
