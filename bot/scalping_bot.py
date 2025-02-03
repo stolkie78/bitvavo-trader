@@ -1,20 +1,20 @@
+import asyncio
 import numpy as np
 import pandas as pd
 from bot.config_loader import ConfigLoader
-# Ensure this is the updated version with multi-position and stop loss logic.
+# Zorg dat deze versie multi-posities en stop loss ondersteunt
 from bot.state_manager import StateManager
 from bot.trading_utils import TradingUtils
 from bot.bitvavo_client import bitvavo
 from bot.logging_facility import LoggingFacility
 import os
-import time
 from datetime import datetime, timedelta
 import argparse
 import json
 
 
 class ScalpingBot:
-    VERSION = "0.1.16"
+    VERSION = "0.1.17"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
@@ -32,6 +32,9 @@ class ScalpingBot:
                    self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
+        # Dictionaries om de RSI los van de check_interval bij te houden.
+        self.last_rsi_update = {pair: None for pair in config["PAIRS"]}
+        self.cached_rsi = {pair: None for pair in config["PAIRS"]}
 
         # Log startup parameters
         self.log_startup_parameters()
@@ -41,7 +44,7 @@ class ScalpingBot:
             self.portfolio, indent=4)}", to_console=True)
 
     def load_portfolio(self):
-        """Load the portfolio content from a JSON file."""
+        """Laadt de portfolio uit een JSON-bestand."""
         if os.path.exists(self.portfolio_file):
             try:
                 with open(self.portfolio_file, "r") as f:
@@ -71,25 +74,43 @@ class ScalpingBot:
         self.log_message(f"📊 Startup Info: {json.dumps(
             startup_info, indent=2)}", to_slack=True)
 
-    def run(self):
+    async def run(self):
         self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
             while True:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
                 self.log_message(f"📈 Current budget per pair: {
                                  self.pair_budgets}")
+                current_time = datetime.now()
+
+                # Itereer over elk crypto-paar
                 for pair in self.config["PAIRS"]:
-                    current_price = TradingUtils.fetch_current_price(
-                        self.bitvavo, pair)
-                    rsi = TradingUtils.calculate_rsi(
-                        self.price_history[pair], self.config["WINDOW_SIZE"])
+                    # Haal de huidige prijs asynchroon op (via een thread)
+                    current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, pair)
+
+                    # Werk de prijs geschiedenis bij
+                    self.price_history[pair].append(current_price)
+                    if len(self.price_history[pair]) > self.config["WINDOW_SIZE"]:
+                        self.price_history[pair].pop(0)
+
+                    # Bepaal of het tijd is om de RSI opnieuw te berekenen
+                    rsi_interval = self.config.get(
+                        "RSI_INTERVAL", self.config["CHECK_INTERVAL"])
+                    last_update = self.last_rsi_update[pair]
+                    if last_update is None or (current_time - last_update).total_seconds() >= rsi_interval:
+                        # RSI berekenen in een aparte thread
+                        rsi = await asyncio.to_thread(TradingUtils.calculate_rsi, self.price_history[pair], self.config["WINDOW_SIZE"])
+                        self.cached_rsi[pair] = rsi
+                        self.last_rsi_update[pair] = current_time
+                    else:
+                        rsi = self.cached_rsi[pair]
 
                     # --- STOP LOSS CHECK ---
                     open_positions = self.state_managers[pair].get_open_positions(
                     )
                     if open_positions:
                         for position in open_positions:
-                            # Calculate stop loss threshold based on the original buy price and the configured percentage.
+                            # Bereken de stop loss drempel (bijv. -5% van de aankoopprijs)
                             stop_loss_threshold = position["price"] * (
                                 1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
                             if current_price <= stop_loss_threshold:
@@ -98,22 +119,23 @@ class ScalpingBot:
                                         current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
                                     to_slack=True
                                 )
-                                self.state_managers[pair].sell_position_with_retry(
+                                # Voer de stop loss met retry asynchroon uit (ook hier kan eventueel to_thread gebruikt worden als de functie synchroon is)
+                                await asyncio.to_thread(
+                                    self.state_managers[pair].sell_position_with_retry,
                                     position,
                                     current_price,
                                     self.config["TRADE_FEE_PERCENTAGE"],
-                                    max_retries=self.config.get(
+                                    self.config.get(
                                         "STOP_LOSS_MAX_RETRIES", 3),
-                                    wait_time=self.config.get(
-                                        "STOP_LOSS_WAIT_TIME", 5)
+                                    self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
-                    # --- TRADING LOGIC BASED ON RSI ---
+                    # --- RSI GEBASEERDE TRADING LOGICA ---
                     if rsi is not None:
                         self.log_message(f"✅ Current price for {pair}: {
                                          current_price:.2f} EUR, RSI={rsi:.2f}")
 
-                        # Selling logic when RSI is high and profit meets threshold.
+                        # Verkooplogica: Als de RSI boven de SELL_THRESHOLD komt en de winst voldoet aan de drempel
                         if rsi >= self.config["SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
@@ -126,8 +148,12 @@ class ScalpingBot:
                                                 rsi:.2f}, Price: {current_price:.2f}, Profit={profit:.2f}%",
                                             to_slack=True
                                         )
-                                        self.state_managers[pair].sell_position(
-                                            pos, current_price, self.config["TRADE_FEE_PERCENTAGE"])
+                                        await asyncio.to_thread(
+                                            self.state_managers[pair].sell_position,
+                                            pos,
+                                            current_price,
+                                            self.config["TRADE_FEE_PERCENTAGE"]
+                                        )
                                     else:
                                         self.log_message(
                                             f"⚠️ Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {
@@ -135,7 +161,7 @@ class ScalpingBot:
                                             to_slack=False
                                         )
 
-                        # Buying logic when RSI is low.
+                        # Kooplogica: Als de RSI onder de BUY_THRESHOLD ligt
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)
@@ -145,7 +171,8 @@ class ScalpingBot:
                                         rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades})",
                                     to_slack=True
                                 )
-                                self.state_managers[pair].buy(
+                                await asyncio.to_thread(
+                                    self.state_managers[pair].buy,
                                     current_price,
                                     self.pair_budgets[pair],
                                     self.config["TRADE_FEE_PERCENTAGE"]
@@ -157,12 +184,8 @@ class ScalpingBot:
                                     to_slack=False
                                 )
 
-                    # Update price history for RSI calculation.
-                    self.price_history[pair].append(current_price)
-                    if len(self.price_history[pair]) > self.config["WINDOW_SIZE"]:
-                        self.price_history[pair].pop(0)
-
-                time.sleep(self.config["CHECK_INTERVAL"])
+                # Wacht asynchroon de CHECK_INTERVAL af
+                await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
             self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
         finally:
@@ -171,32 +194,31 @@ class ScalpingBot:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="ScalpingBot with dynamic configuration, multi-trade support, and stop loss."
+        description="Asynchroon ScalpingBot met dynamische configuratie, multi-trade ondersteuning en een aparte RSI-interval."
     )
     parser.add_argument(
         "--config",
         type=str,
         default="scalper.json",
-        help="Path to the JSON configuration file (default: scalper.json)"
+        help="Pad naar het JSON-configuratiebestand (default: scalper.json)"
     )
     parser.add_argument(
         "--bot-name",
         type=str,
         required=True,
-        help="Unique name for the bot instance (required)"
+        help="Unieke naam voor de bot-instantie (verplicht)"
     )
     args = parser.parse_args()
 
     config_path = os.path.abspath(args.config)
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+        raise FileNotFoundError(
+            f"Configuratiebestand niet gevonden: {config_path}")
 
-    # Initialize bitvavo client and load configurations.
     bitvavo_instance = bitvavo(ConfigLoader.load_config("bitvavo.json"))
     config = ConfigLoader.load_config(config_path)
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
 
-    # Create a StateManager for each trading pair.
     state_managers = {
         pair: StateManager(pair, logger, bitvavo_instance,
                            demo_mode=config.get("DEMO_MODE", False))
@@ -204,4 +226,4 @@ if __name__ == "__main__":
     }
 
     bot = ScalpingBot(config, logger, state_managers, bitvavo_instance, args)
-    bot.run()
+    asyncio.run(bot.run())
