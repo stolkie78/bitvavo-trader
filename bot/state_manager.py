@@ -93,18 +93,49 @@ class StateManager:
                         pair}. Returning original quantity.", to_console=True)
         return quantity
 
+
     def buy(self, price, budget, fee_percentage):
-        """Execute a buy order and add a new position for the pair."""
+        """
+        Execute a buy order and add a new position for the pair.
+        Voert tevens een budget-check uit: als het beschikbare saldo lager is dan het toegewezen budget, 
+        wordt de koop niet uitgevoerd.
+
+        Args:
+            price (float): De aankoopprijs.
+            budget (float): Het bedrag dat besteed mag worden voor de aankoop.
+            fee_percentage (float): De transactiekosten in procenten.
+        """
+        # Budget-check: haal het beschikbare saldo op voor het asset "EUR"
+        try:
+            available_balance = TradingUtils.get_account_balance(
+                self.bitvavo, asset="EUR")
+        except Exception as e:
+            self.logger.log(f"Error retrieving account balance: {
+                            e}", to_console=True)
+            return
+
+        if available_balance < budget:
+            self.logger.log(
+                f"Insufficient funds to buy {self.pair}. Required: {
+                    budget:.2f} EUR, available: {available_balance:.2f} EUR",
+                to_console=True
+            )
+            return
+
+        # Bereken de hoeveelheid die gekocht kan worden
         quantity = (budget / price) * (1 - fee_percentage / 100)
         quantity = self.adjust_quantity(self.pair, quantity)
 
         if quantity <= 0:
-            self.logger.log(f"👽❌ Invalid quantity for {self.pair}: {
-                            quantity}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽❌ Invalid quantity for {self.pair}: {quantity}",
+                to_console=True, to_slack=False
+            )
             return
 
         order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
+            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
+        )
 
         if order.get("status") == "demo" or "orderId" in order:
             new_position = {
@@ -112,7 +143,7 @@ class StateManager:
                 "quantity": quantity,
                 "timestamp": datetime.now().isoformat()
             }
-            # Ensure the portfolio stores positions as a list
+            # Zorg dat de portfolio de posities als een lijst opslaat
             if self.pair not in self.portfolio:
                 self.portfolio[self.pair] = []
             elif not isinstance(self.portfolio[self.pair], list):
@@ -120,11 +151,17 @@ class StateManager:
             self.portfolio[self.pair].append(new_position)
             self.save_portfolio()
             self.log_trade("buy", price, quantity)
-            self.logger.log(f"👽 Bought {self.pair}: Price={price:.2f}, Quantity={
-                            quantity:.6f}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽 Bought {self.pair}: Price={
+                    price:.2f}, Quantity={quantity:.6f}",
+                to_console=True, to_slack=False
+            )
         else:
-            self.logger.log(f"👽 Failed to execute buy order for {self.pair}: {
-                            order}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽 Failed to execute buy order for {self.pair}: {order}",
+                to_console=True, to_slack=False
+            )
+
 
     def sell(self, price, fee_percentage):
         """
