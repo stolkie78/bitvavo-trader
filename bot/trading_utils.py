@@ -1,4 +1,6 @@
 import json
+import time
+import logging
 from datetime import datetime
 import pandas as pd
 from ta.momentum import RSIIndicator
@@ -6,93 +8,114 @@ from ta.momentum import RSIIndicator
 
 class TradingUtils:
     @staticmethod
-    def fetch_current_price(bitvavo, pair):
-        """Fetches the current price of a trading pair using the Bitvavo API."""
-        try:
-            ticker = bitvavo.tickerPrice({"market": pair})
-            if "price" in ticker:
-                return float(ticker["price"])
-            else:
-                raise ValueError(f"Unexpected response format: {ticker}")
-        except Exception as e:
-            raise RuntimeError(f"Error fetching current price for {pair}: {e}")
+    def fetch_current_price(bitvavo, pair, retries=3, delay=2):
+        """
+        Fetches the current price of a trading pair using the Bitvavo API.
+        Voert automatisch retries uit bij tijdelijke fouten.
+        
+        :param bitvavo: Geconfigureerde Bitvavo API-client.
+        :param pair: Trading pair, bijvoorbeeld "BTC-EUR".
+        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
+        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
+        :return: Huidige prijs als float.
+        :raises: RuntimeError als geen geldige response wordt ontvangen na alle pogingen.
+        """
+        for attempt in range(1, retries + 1):
+            try:
+                ticker = bitvavo.tickerPrice({"market": pair})
+                if isinstance(ticker, str):
+                    ticker = json.loads(ticker)
+                if "price" in ticker:
+                    price = float(ticker["price"])
+                    logging.debug("Fetched current price for %s: %s", pair, price)
+                    return price
+                else:
+                    raise ValueError(f"Unexpected response format: {ticker}")
+            except Exception as e:
+                logging.warning("Poging %d om huidige prijs op te halen voor %s mislukt: %s", attempt, pair, e)
+                if attempt == retries:
+                    raise RuntimeError(f"Error fetching current price for {pair}: {e}") from e
+                time.sleep(delay)
 
     @staticmethod
     def calculate_rsi(price_history, window_size):
-        """Calculates the RSI based on the price history."""
+        """
+        Calculates the RSI based on the price history.
+        
+        :param price_history: Lijst met historische prijzen.
+        :param window_size: Het venster voor de RSI-berekening.
+        :return: De meest recente RSI-waarde of None indien er onvoldoende data is.
+        """
         if len(price_history) < window_size:
             return None
-        rsi_indicator = RSIIndicator(
-            pd.Series(price_history), window=window_size)
+        rsi_indicator = RSIIndicator(pd.Series(price_history), window=window_size)
         return rsi_indicator.rsi().iloc[-1]
 
     @staticmethod
-    def get_account_balance(bitvavo, asset="EUR"):
+    def get_account_balance(bitvavo, asset="EUR", retries=3, delay=2):
         """
-        Haalt het accountsaldo op voor het opgegeven asset via de Bitvavo API.
+        Haalt het accountsaldo op voor het opgegeven asset via de Bitvavo API met retry-opties.
         
-        Parameters:
-            bitvavo: De Bitvavo API-client.
-            asset (str): Het asset symbool waarvan het saldo wordt opgehaald (default "EUR").
-        
-        Returns:
-            float: Het beschikbare saldo voor het asset.
-        
-        Raises:
-            RuntimeError: Indien het ophalen van het saldo mislukt.
+        :param bitvavo: De Bitvavo API-client.
+        :param asset: Het asset symbool waarvan het saldo wordt opgehaald (default "EUR").
+        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
+        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
+        :return: Het beschikbare saldo voor het asset als float.
+        :raises: RuntimeError indien het ophalen van het saldo mislukt na alle pogingen.
         """
-        try:
-            balance_data = bitvavo.balance()
+        for attempt in range(1, retries + 1):
+            try:
+                balance_data = bitvavo.balance()
+                if isinstance(balance_data, str):
+                    balance_data = json.loads(balance_data)
 
-            # Als balance_data een string is, converteren we deze naar een Python-object.
-            if isinstance(balance_data, str):
-                balance_data = json.loads(balance_data)
-
-            # Check of we een flat dictionary hebben (bijv. {"BTC": 0.001, "ETH": 0.5, "EUR": 60.00})
-            if isinstance(balance_data, dict) and not isinstance(balance_data, list):
-                # Als alle values numeriek zijn, gaan we ervan uit dat de keys direct de valuta's zijn.
-                if all(isinstance(v, (int, float)) for v in balance_data.values()):
-                    if asset in balance_data:
-                        return float(balance_data[asset])
+                # Als we een flat dictionary hebben (bijv. {"BTC": 0.001, "ETH": 0.5, "EUR": 60.00})
+                if isinstance(balance_data, dict) and not isinstance(balance_data, list):
+                    # Als alle values numeriek zijn, gaan we ervan uit dat de keys direct de valuta's zijn.
+                    if all(isinstance(v, (int, float)) for v in balance_data.values()):
+                        if asset in balance_data:
+                            balance = float(balance_data[asset])
+                            logging.debug("Fetched account balance for %s: %s", asset, balance)
+                            return balance
+                        else:
+                            raise ValueError(f"Saldo voor asset {asset} niet gevonden in flat dict")
                     else:
-                        raise ValueError(f"Saldo voor asset {
-                                         asset} niet gevonden in flat dict")
-                else:
-                    # Als de dictionary niet flat is, werken we met de values.
-                    balance_data = balance_data.values()
+                        balance_data = balance_data.values()
 
-            # Ga ervan uit dat balance_data nu een iterabele is van entries (bijv. een lijst van dictionaries)
-            for entry in balance_data:
-                # Zorg ervoor dat we alleen dictionaries verwerken.
-                if not isinstance(entry, dict):
-                    continue
-                # Controleer op keys "asset", "symbol" of "currency"
-                asset_key = entry.get("asset") or entry.get(
-                    "symbol") or entry.get("currency")
-                if asset_key == asset:
-                    return float(entry.get("available", 0.0))
-            raise ValueError(f"Saldo voor asset {asset} niet gevonden")
-        except Exception as e:
-            raise RuntimeError(
-                f"Error fetching account balance for {asset}: {e}")
+                # Ga ervan uit dat balance_data een iterabele is van entries (bijv. een lijst van dictionaries)
+                for entry in balance_data:
+                    if not isinstance(entry, dict):
+                        continue
+                    asset_key = entry.get("asset") or entry.get("symbol") or entry.get("currency")
+                    if asset_key == asset:
+                        balance = float(entry.get("available", 0.0))
+                        logging.debug("Fetched account balance for %s: %s", asset, balance)
+                        return balance
+                raise ValueError(f"Saldo voor asset {asset} niet gevonden")
+            except Exception as e:
+                logging.warning("Poging %d om account balance voor %s op te halen mislukt: %s", attempt, asset, e)
+                if attempt == retries:
+                    raise RuntimeError(f"Error fetching account balance for {asset}: {e}") from e
+                time.sleep(delay)
 
     @staticmethod
-    def place_order(bitvavo, market, side, amount, demo_mode=False):
+    def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
         """
-        Place a buy or sell order via the Bitvavo API or simulate it in demo mode.
+        Plaatst een buy of sell order via de Bitvavo API of simuleert deze in demo mode,
+        met retry-opties voor tijdelijke fouten.
         
-        Args:
-            bitvavo (Bitvavo): The initialized Bitvavo API client.
-            market (str): Trading pair, e.g., "BTC-EUR".
-            side (str): "buy" or "sell".
-            amount (float): The amount to buy or sell.
-            demo_mode (bool): Whether to simulate the order (default: False).
-        
-        Returns:
-            dict: Response from the Bitvavo API or a simulated order.
+        :param bitvavo: Geconfigureerde Bitvavo API-client.
+        :param market: Trading pair, bv. "BTC-EUR".
+        :param side: "buy" of "sell".
+        :param amount: De hoeveelheid om te kopen of verkopen.
+        :param demo_mode: Of de order gesimuleerd wordt (default: False).
+        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
+        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
+        :return: Response van de Bitvavo API of een gesimuleerde order.
+        :raises: RuntimeError indien de orderplaatsing mislukt na alle pogingen.
         """
         if demo_mode:
-            return {
+            simulated_order = {
                 "status": "demo",
                 "side": side,
                 "market": market,
@@ -100,9 +123,19 @@ class TradingUtils:
                 "order_type": "market",
                 "timestamp": datetime.now().isoformat()
             }
-        try:
-            order = bitvavo.placeOrder(
-                market, side, "market", {"amount": amount})
-            return order
-        except Exception as e:
-            raise RuntimeError(f"Error placing {side} order for {market}: {e}")
+            logging.debug("Simulated order: %s", simulated_order)
+            return simulated_order
+
+        for attempt in range(1, retries + 1):
+            try:
+                order = bitvavo.placeOrder(market, side, "market", {"amount": amount})
+                # Controleer op een eventuele error in de response
+                if isinstance(order, dict) and order.get("error"):
+                    raise ValueError(f"API error: {order.get('error')}")
+                logging.debug("Placed order for %s: %s", market, order)
+                return order
+            except Exception as e:
+                logging.warning("Poging %d voor orderplaatsing op %s mislukt: %s", attempt, market, e)
+                if attempt == retries:
+                    raise RuntimeError(f"Error placing {side} order for {market}: {e}") from e
+                time.sleep(delay)
