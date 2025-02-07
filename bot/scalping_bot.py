@@ -79,8 +79,7 @@ class ScalpingBot:
         try:
             while True:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
-                self.log_message(f"📈 Current budget per pair: {
-                                 self.pair_budgets}")
+                self.log_message(f"📈 Current budget per pair: {self.pair_budgets}")
                 current_time = datetime.now()
 
                 # Itereer over elk crypto-paar

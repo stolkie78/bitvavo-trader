@@ -2,6 +2,7 @@ import logging
 import os
 from bot.slack_notifier import SlackNotifier
 
+
 class LoggingFacility:
     """
     A centralized logging facility for both console and Slack logging.
@@ -16,9 +17,12 @@ class LoggingFacility:
         """
         self.console_logger = logging.getLogger("console")
         self.console_logger.setLevel(logging.INFO)
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
-        self.console_logger.addHandler(console_handler)
+        # Voeg alleen een handler toe als er nog geen handlers zijn
+        if not self.console_logger.handlers:
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter("%(asctime)s - %(message)s"))
+            self.console_logger.addHandler(console_handler)
 
         self.slack_notifier = SlackNotifier(config.get("SLACK_WEBHOOK_URL"))
         self.slack_results_only = config.get("SLACK_RESULTS_ONLY", True)

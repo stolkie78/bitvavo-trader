@@ -74,8 +74,11 @@ class StateManager:
                 with open(self.portfolio_file, "w") as f:
                     json.dump(self.portfolio, f, indent=4)
                 self.portfolio = self.load_portfolio()  # Reload to confirm changes
-                self.logger.log(f"👽 Portfolio successfully updated: {
-                                json.dumps(self.portfolio, indent=4)}", to_console=True)
+                self.logger.log(
+                    f"👽 Portfolio successfully updated: {
+                        json.dumps(self.portfolio, indent=4)}",
+                    to_console=True
+                )
             except Exception as e:
                 self.logger.log(f"👽❌ Error saving portfolio: {
                                 e}", to_console=True)
@@ -93,7 +96,6 @@ class StateManager:
                         pair}. Returning original quantity.", to_console=True)
         return quantity
 
-
     def buy(self, price, budget, fee_percentage):
         """
         Execute a buy order and add a new position for the pair.
@@ -105,7 +107,6 @@ class StateManager:
             budget (float): Het bedrag dat besteed mag worden voor de aankoop.
             fee_percentage (float): De transactiekosten in procenten.
         """
-        # Budget-check: haal het beschikbare saldo op voor het asset "EUR"
         try:
             available_balance = TradingUtils.get_account_balance(
                 self.bitvavo, asset="EUR")
@@ -122,20 +123,16 @@ class StateManager:
             )
             return
 
-        # Bereken de hoeveelheid die gekocht kan worden
         quantity = (budget / price) * (1 - fee_percentage / 100)
         quantity = self.adjust_quantity(self.pair, quantity)
 
         if quantity <= 0:
-            self.logger.log(
-                f"👽❌ Invalid quantity for {self.pair}: {quantity}",
-                to_console=True, to_slack=False
-            )
+            self.logger.log(f"👽❌ Invalid quantity for {self.pair}: {
+                            quantity}", to_console=True, to_slack=False)
             return
 
         order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
-        )
+            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
 
         if order.get("status") == "demo" or "orderId" in order:
             new_position = {
@@ -143,7 +140,6 @@ class StateManager:
                 "quantity": quantity,
                 "timestamp": datetime.now().isoformat()
             }
-            # Zorg dat de portfolio de posities als een lijst opslaat
             if self.pair not in self.portfolio:
                 self.portfolio[self.pair] = []
             elif not isinstance(self.portfolio[self.pair], list):
@@ -162,7 +158,6 @@ class StateManager:
                 to_console=True, to_slack=False
             )
 
-
     def sell(self, price, fee_percentage):
         """
         Execute a sell order for all open positions and remove them from the portfolio.
@@ -175,7 +170,6 @@ class StateManager:
                             self.pair}.", to_console=True)
             return
 
-        # Sell each open position individually
         for position in list(open_positions):
             self.sell_position(position, price, fee_percentage)
 
@@ -204,7 +198,6 @@ class StateManager:
 
         if order.get("status") == "demo" or "orderId" in order:
             self.log_trade("sell", price, quantity, profit)
-            # Remove the sold position from the portfolio
             if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                 try:
                     self.portfolio[self.pair].remove(position)
@@ -212,11 +205,15 @@ class StateManager:
                     self.logger.log(f"👽❌ Position not found in portfolio for {
                                     self.pair}.", to_console=True)
             self.save_portfolio()
-            self.logger.log(f"👽 Sold {self.pair}: Price={price:.2f}, Profit={
-                            profit:.2f}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽 Sold {self.pair}: Price={price:.2f}, Profit={profit:.2f}",
+                to_console=True, to_slack=False
+            )
         else:
-            self.logger.log(f"👽 Failed to execute sell order for {self.pair}: {
-                            order}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽 Failed to execute sell order for {self.pair}: {order}",
+                to_console=True, to_slack=False
+            )
 
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
         """
@@ -235,16 +232,22 @@ class StateManager:
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(self.pair, quantity)
         if quantity <= 0:
-            self.logger.log(f"👽❌ Invalid quantity for {self.pair} during stop loss sell: {
-                            quantity}", to_console=True, to_slack=False)
+            self.logger.log(
+                f"👽❌ Invalid quantity for {
+                    self.pair} during stop loss sell: {quantity}",
+                to_console=True, to_slack=False
+            )
             return False
 
         cost_basis = position["price"] * quantity
         for attempt in range(1, max_retries + 1):
             revenue = current_price * quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
-            self.logger.log(f"⛔️ Stop loss attempt {attempt} for {self.pair}: Trying to sell at {
-                            current_price:.2f} (Profit: {profit:.2f})", to_console=True)
+            self.logger.log(
+                f"⛔️ Stop loss attempt {attempt} for {self.pair}: Trying to sell at {
+                    current_price:.2f} (Profit: {profit:.2f})",
+                to_console=True
+            )
 
             order = TradingUtils.place_order(
                 self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode)
@@ -257,12 +260,18 @@ class StateManager:
                         self.logger.log(f"👽❌ Position not found in portfolio for {
                                         self.pair}.", to_console=True)
                 self.save_portfolio()
-                self.logger.log(f"👽 Stop loss sold {self.pair}: Price={
-                                current_price:.2f}, Profit={profit:.2f}", to_console=True, to_slack=False)
+                self.logger.log(
+                    f"👽 Stop loss sold {self.pair}: Price={
+                        current_price:.2f}, Profit={profit:.2f}",
+                    to_console=True, to_slack=False
+                )
                 return True
             else:
-                self.logger.log(f"👽 Stop loss sell attempt {attempt} failed for {
-                                self.pair}: {order}", to_console=True)
+                self.logger.log(
+                    f"👽 Stop loss sell attempt {
+                        attempt} failed for {self.pair}: {order}",
+                    to_console=True
+                )
                 time.sleep(wait_time)
         self.logger.log(f"👽❌ Stop loss sell failed for {self.pair} after {
                         max_retries} attempts.", to_console=True)
@@ -278,8 +287,11 @@ class StateManager:
         """
         open_positions = self.get_open_positions()
         if not open_positions:
-            self.logger.log(f"⚠️ No active position for {
-                            self.pair}. Skipping profit calculation.", to_console=True)
+            self.logger.log(
+                f"⚠️ No active position for {
+                    self.pair}. Skipping profit calculation.",
+                to_console=True
+            )
             return None
 
         total_cost = 0
@@ -319,16 +331,19 @@ class StateManager:
             trade_type (str): "buy" or "sell".
             price (float): Trade price.
             quantity (float): Quantity traded.
-            profit (float, optional): Profit from the trade.
+            profit (float, optional): Profit from the trade in euros (only applicable for sell trades).
         """
         trade = {
             "pair": self.pair,
             "type": trade_type,
             "price": price,
             "quantity": quantity,
-            "profit": profit,
             "timestamp": datetime.now().isoformat()
         }
+        # Voeg de winst in euro's toe voor sell trades
+        if trade_type.lower() == "sell" and profit is not None:
+            trade["profit_eur"] = profit
+
         try:
             if not os.path.exists(self.trades_file):
                 with open(self.trades_file, "w") as f:
