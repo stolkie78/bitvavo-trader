@@ -37,6 +37,6 @@ echo "🐳 Running Docker container '${IMAGE}_${TAG}_${CONFIG}'..."
 docker run --restart=always --name "${IMAGE}_${CONFIG}" -d \
   -v "$(pwd)/config/:/app/config" \
   -v "${VOLUME_NAME}:/app/data" \
-  "${IMAGE}:${TAG}" --config config/${CONFIG}.json --bot-name ${BOTNAME} || handle_error "Failed to start Docker container '${IMAGE}_${CONFIG}'."
+  "${IMAGE}:${TAG}" --config config/${CONFIG}.json || handle_error "Failed to start Docker container '${IMAGE}_${CONFIG}'."
 
 echo "✅ Docker container '${IMAGE}_${CONFIG}' is running successfully."
