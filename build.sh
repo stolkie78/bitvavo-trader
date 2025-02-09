@@ -16,7 +16,7 @@ IMAGE=$1
 TAG=$2
 
 echo "🚀 Starting build process for Docker image '${IMAGE}:${TAG}'..."
-
+git checkout main
 # Update Git repository
 echo "🔄 Pulling latest changes..."
 git pull || handle_error "Failed to pull latest changes."

@@ -14,18 +14,29 @@ import json
 
 
 class ScalpingBot:
+    """
+    Asynchroon ScalpingBot met ondersteuning voor multi-posities en stop loss.
+    """
     VERSION = "0.1.22"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
+        """
+        Initialiseert de ScalpingBot.
+
+        De botnaam wordt nu ingeladen vanuit de JSON-configuratie via het veld "PROFILE".
+        """
         self.config = config
         self.logger = logger
         self.state_managers = state_managers
         self.bitvavo = bitvavo
         self.args = args
+
+        # Haal de botnaam uit de config; als deze niet bestaat, gebruik een standaardwaarde.
+        self.bot_name = config.get("PROFILE", "SCALPINGBOT")
+
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
-        self.bot_name = args.bot_name
         self.price_history = {pair: [] for pair in config["PAIRS"]}
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] *
@@ -40,8 +51,10 @@ class ScalpingBot:
         self.log_startup_parameters()
 
         # Log portfolio
-        self.logger.log(f"📂 Loaded Portfolio:\n{json.dumps(
-            self.portfolio, indent=4)}", to_console=True)
+        self.logger.log(
+            f"📂 Loaded Portfolio:\n{json.dumps(self.portfolio, indent=4)}",
+            to_console=True
+        )
 
     def load_portfolio(self):
         """Laadt de portfolio uit een JSON-bestand."""
@@ -53,15 +66,17 @@ class ScalpingBot:
                         "Portfolio loaded successfully.", to_console=True)
                     return portfolio
             except Exception as e:
-                self.logger.log(f"👽❌ Error loading portfolio: {
-                                e}", to_console=True)
+                self.logger.log(
+                    f"👽❌ Error loading portfolio: {e}", to_console=True)
         return {}
 
     def log_message(self, message: str, to_slack: bool = False):
+        """Voegt de botnaam toe aan het bericht en logt het."""
         prefixed_message = f"[{self.bot_name}] {message}"
         self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
 
     def log_startup_parameters(self):
+        """Logt de opstartparameters van de bot."""
         startup_info = {
             "version": self.VERSION,
             "bot_name": self.bot_name,
@@ -71,21 +86,25 @@ class ScalpingBot:
             "total_budget": self.config.get("TOTAL_BUDGET", "N/A"),
         }
         self.log_message("🚀 Starting ScalpingBot", to_slack=True)
-        self.log_message(f"📊 Startup Info: {json.dumps(
-            startup_info, indent=2)}", to_slack=True)
+        self.log_message(
+            f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     async def run(self):
+        """Voert de hoofdloop van de bot asynchroon uit."""
         self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
             while True:
                 self.log_message(f"📊 New cycle started at {datetime.now()}")
-                self.log_message(f"📈 Current budget per pair: {self.pair_budgets}")
+                self.log_message(
+                    f"📈 Current budget per pair: {self.pair_budgets}")
                 current_time = datetime.now()
 
                 # Itereer over elk crypto-paar
                 for pair in self.config["PAIRS"]:
                     # Haal de huidige prijs asynchroon op (via een thread)
-                    current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, pair)
+                    current_price = await asyncio.to_thread(
+                        TradingUtils.fetch_current_price, self.bitvavo, pair
+                    )
 
                     # Werk de prijs geschiedenis bij
                     self.price_history[pair].append(current_price)
@@ -97,7 +116,9 @@ class ScalpingBot:
                         "RSI_INTERVAL", self.config["CHECK_INTERVAL"])
                     last_update = self.last_rsi_update[pair]
                     if last_update is None or (current_time - last_update).total_seconds() >= rsi_interval:
-                        rsi = await asyncio.to_thread(TradingUtils.calculate_rsi, self.price_history[pair], self.config["WINDOW_SIZE"])
+                        rsi = await asyncio.to_thread(
+                            TradingUtils.calculate_rsi, self.price_history[pair], self.config["WINDOW_SIZE"]
+                        )
                         self.cached_rsi[pair] = rsi
                         self.last_rsi_update[pair] = current_time
                     else:
@@ -110,11 +131,13 @@ class ScalpingBot:
                         for position in open_positions:
                             # Bereken de stop loss drempel (bijv. -5% van de aankoopprijs)
                             stop_loss_threshold = position["price"] * (
-                                1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
+                                1 +
+                                self.config.get(
+                                    "STOP_LOSS_PERCENTAGE", -5) / 100
+                            )
                             if current_price <= stop_loss_threshold:
                                 self.log_message(
-                                    f"⛔️ Stop loss triggered for {pair}: current price {
-                                        current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
+                                    f"⛔️ Stop loss triggered for {pair}: current price {current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -129,8 +152,8 @@ class ScalpingBot:
 
                     # --- RSI GEBASEERDE TRADING LOGICA ---
                     if rsi is not None:
-                        self.log_message(f"✅ Current price for {pair}: {
-                                         current_price:.2f} EUR, RSI={rsi:.2f}")
+                        self.log_message(
+                            f"✅ Current price for {pair}: {current_price:.2f} EUR, RSI={rsi:.2f}")
 
                         # Verkooplogica: Als de RSI boven de SELL_THRESHOLD komt en de winst voldoet aan de drempel
                         if rsi >= self.config["SELL_THRESHOLD"]:
@@ -146,8 +169,7 @@ class ScalpingBot:
 
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {
-                                                current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -158,8 +180,7 @@ class ScalpingBot:
                                         )
                                     else:
                                         self.log_message(
-                                            f"⚠️ Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {
-                                                profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                            f"⚠️ Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
                                             to_slack=False
                                         )
 
@@ -171,10 +192,8 @@ class ScalpingBot:
                                 # Verdeel het totaal toegewezen budget voor dit paar over het maximaal aantal trades
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {
-                                        len(open_positions)} (max allowed: {max_trades}). "
-                                    f"Investeringsbedrag per trade: {
-                                        investment_per_trade:.2f}",
+                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). "
+                                    f"Investeringsbedrag per trade: {investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -185,8 +204,7 @@ class ScalpingBot:
                                 )
                             else:
                                 self.log_message(
-                                    f"ℹ️ Not buying {pair} as open trades ({len(open_positions)}) reached the limit of {
-                                        max_trades}.",
+                                    f"ℹ️ Not buying {pair} as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
                                     to_slack=False
                                 )
 
@@ -208,12 +226,7 @@ if __name__ == "__main__":
         default="scalper.json",
         help="Pad naar het JSON-configuratiebestand (default: scalper.json)"
     )
-    parser.add_argument(
-        "--bot-name",
-        type=str,
-        required=True,
-        help="Unieke naam voor de bot-instantie (verplicht)"
-    )
+    # De command-line parameter voor botnaam is verwijderd, aangezien deze nu uit de JSON-configuratie komt.
     args = parser.parse_args()
 
     config_path = os.path.abspath(args.config)
