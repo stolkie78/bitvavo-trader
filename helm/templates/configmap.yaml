@@ -1,7 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: {{ .Release.Name }}-scalping-bot-config
-data:
-  scalper.json: |-
-    {{ .Values.config.scalperConfig | nindent 4 }}

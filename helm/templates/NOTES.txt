@@ -1,3 +1,0 @@
-Your bot has been deployed!
-Run the following command to check the status:
-  kubectl get pods -l app={{ .Chart.Name }}
