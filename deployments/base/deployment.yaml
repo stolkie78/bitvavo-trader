@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-scalper
+  labels:
+    app: test-scalper
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-scalper
+  template:
+    metadata:
+      labels:
+        app: test-scalper
+    spec:
+      containers:
+      - name: bitvavo-scalper
+        image: bitvavo-scalper:latest
+        resources:
+          limits:
+            memory: "256Mi" # Maximum geheugenlimiet
+            cpu: "500m" # Maximum CPU (halve core)
+          requests:
+            memory: "128Mi" # Minimum geheugenrequest
+            cpu: "250m" # Minimum CPU (kwart van een core)
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config
+        - name: data-volume
+          mountPath: /app/data
+        args:
+        - "--config"
+        - "/app/config/scalper.json" # Pad naar het configuratiebestand in de container
+      volumes:
+      - name: config-volume
+        configMap:
+          name: test-scalper
+          items:
+          - key: scalper.json
+            path: scalper.json
+      - name: data-volume
+        hostPath:
+          path: /data #Pas dit pad aan naar jouw omgeving

@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-scalper
+data:
+  scalper.json: |-
+    {
+      "PROFILE": "TEST",
+      "PAIRS": ["BTC-EUR", "ETH-EUR"],
+      "TOTAL_BUDGET": 100,
+      "PORTFOLIO_ALLOCATION": {
+        "BTC-EUR": 60,
+        "ETH-EUR": 40
+      },
+      "WINDOW_SIZE": 3,
+      "CHECK_INTERVAL": 10,
+      "RSI_INTERVAL": 60,
+      "SELL_THRESHOLD": 70,
+      "BUY_THRESHOLD": 30,
+      "MINIMUM_PROFIT_PERCENTAGE": 1.0,
+      "STOP_LOSS_PERCENTAGE": -5,
+      "STOP_LOSS_MAX_RETRIES": 3,
+      "STOP_LOSS_WAIT_TIME": 5,
+      "TRADE_FEE_PERCENTAGE": 0.25,
+      "MAX_TRADES_PER_PAIR": 1,
+      "DEMO_MODE": true
+    }
