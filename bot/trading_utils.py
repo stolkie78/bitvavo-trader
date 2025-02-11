@@ -181,3 +181,31 @@ class TradingUtils:
                     raise RuntimeError(
                         f"Error retrieving order details for {order_id}: {e}") from e
                 time.sleep(delay)
+
+    @staticmethod
+    def fetch_historical_prices(bitvavo, pair, limit=14, interval="1m"):
+        """
+        Haalt historische sluitingsprijzen op voor een gegeven trading pair met één API-aanroep.
+
+        :param bitvavo: Geconfigureerde Bitvavo API-client.
+        :param pair: Trading pair, bijvoorbeeld "BTC-EUR".
+        :param limit: Aantal historische datapoints (default: 14).
+        :param interval: Candle-interval (bijv. "1m" voor 1 minuut).
+        :return: Een lijst met sluitingsprijzen (floats).
+        :raises: RuntimeError als de historische data niet in het verwachte format wordt teruggegeven.
+        """
+        # Geef de parameters mee als dictionary (wat vaak wel de API verwacht)
+        candles = bitvavo.candles(pair, interval, {"limit": limit})
+        if isinstance(candles, str):
+            candles = json.loads(candles)
+        # Controleer of we een lijst met candles hebben en dat elk candle een iterabele is
+        if not isinstance(candles, list) or not candles or not isinstance(candles[0], (list, tuple)):
+            raise RuntimeError(
+                f"Unexpected response format for candles: {candles}")
+        try:
+            prices = [float(candle[4]) for candle in candles]
+        except Exception as e:
+            raise RuntimeError(
+                f"Error processing candle data for {pair}: {e}") from e
+        logging.debug("Fetched historical prices for %s: %s", pair, prices)
+        return prices
