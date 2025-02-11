@@ -2,7 +2,6 @@ import asyncio
 import numpy as np
 import pandas as pd
 from bot.config_loader import ConfigLoader
-# Zorg dat deze versie multi-posities en stop loss ondersteunt
 from bot.state_manager import StateManager
 from bot.trading_utils import TradingUtils
 from bot.bitvavo_client import bitvavo
@@ -17,13 +16,13 @@ class ScalpingBot:
     """
     Asynchroon ScalpingBot met ondersteuning voor multi-posities en stop loss.
     """
-    VERSION = "0.1.23"
+    VERSION = "0.1.25"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
         Initialiseert de ScalpingBot.
-
-        De botnaam wordt nu ingeladen vanuit de JSON-configuratie via het veld "PROFILE".
+        
+        De botnaam wordt ingeladen vanuit de JSON-configuratie via het veld "PROFILE".
         """
         self.config = config
         self.logger = logger
@@ -31,26 +30,42 @@ class ScalpingBot:
         self.bitvavo = bitvavo
         self.args = args
 
-        # Haal de botnaam uit de config; als deze niet bestaat, gebruik een standaardwaarde.
         self.bot_name = config.get("PROFILE", "SCALPINGBOT")
-
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
-        self.price_history = {pair: [] for pair in config["PAIRS"]}
+
+        # Haal de nieuwe RSI-opties uit de config (in uppercase) met fallback-waarden.
+        self.rsi_points = config.get("RSI_POINTS", 14)  # aantal RSI punten
+        # RSI_INTERVAL is het candle-interval. Omdat de API meestal lowercase verwacht, converteren we deze:
+        self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
+
+        # Pre-populeer de prijsgeschiedenis per trading pair met historische data
+        self.price_history = {}
+        for pair in config["PAIRS"]:
+            try:
+                historical_prices = TradingUtils.fetch_historical_prices(
+                    self.bitvavo,
+                    pair,
+                    limit=self.rsi_points,
+                    interval=self.rsi_interval
+                )
+                self.price_history[pair] = historical_prices
+                self.log_message(
+                    f"Historische prijzen voor {pair} ingeladen: {historical_prices}")
+            except Exception as e:
+                self.log_message(
+                    f"⚠️ Historische prijzen voor {pair} konden niet worden opgehaald: {e}")
+                # fallback indien ophalen mislukt
+                self.price_history[pair] = []
+
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] *
                    self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
-        # Dictionaries om de RSI los van de CHECK_INTERVAL bij te houden.
-        self.last_rsi_update = {pair: None for pair in config["PAIRS"]}
-        self.cached_rsi = {pair: None for pair in config["PAIRS"]}
 
-        # Log startup parameters
         self.log_startup_parameters()
-
-        # Log portfolio
         self.logger.log(
             f"📂 Loaded Portfolio:\n{json.dumps(self.portfolio, indent=4)}",
             to_console=True
@@ -84,6 +99,9 @@ class ScalpingBot:
             "config_file": self.args.config,
             "trading_pairs": self.config.get("PAIRS", []),
             "total_budget": self.config.get("TOTAL_BUDGET", "N/A"),
+            "RSI_POINTS": self.rsi_points,
+            # laten we hier de waarde in uppercase tonen
+            "RSI_INTERVAL": self.rsi_interval.upper()
         }
         self.log_message("🚀 Starting ScalpingBot", to_slack=True)
         self.log_message(
@@ -101,40 +119,30 @@ class ScalpingBot:
 
                 # Itereer over elk crypto-paar
                 for pair in self.config["PAIRS"]:
-                    # Haal de huidige prijs asynchroon op (via een thread)
                     current_price = await asyncio.to_thread(
                         TradingUtils.fetch_current_price, self.bitvavo, pair
                     )
 
-                    # Werk de prijs geschiedenis bij
+                    # Voeg de nieuwe prijs toe en behoud altijd het RSI_POINTS aantal prijzen
                     self.price_history[pair].append(current_price)
-                    if len(self.price_history[pair]) > self.config["WINDOW_SIZE"]:
+                    if len(self.price_history[pair]) > self.rsi_points:
                         self.price_history[pair].pop(0)
 
-                    # Bepaal of het tijd is om de RSI opnieuw te berekenen
-                    rsi_interval = self.config.get(
-                        "RSI_INTERVAL", self.config["CHECK_INTERVAL"])
-                    last_update = self.last_rsi_update[pair]
-                    if last_update is None or (current_time - last_update).total_seconds() >= rsi_interval:
+                    # Bereken de RSI op basis van de beschikbare data
+                    if len(self.price_history[pair]) >= self.rsi_points:
                         rsi = await asyncio.to_thread(
-                            TradingUtils.calculate_rsi, self.price_history[pair], self.config["WINDOW_SIZE"]
+                            TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
                         )
-                        self.cached_rsi[pair] = rsi
-                        self.last_rsi_update[pair] = current_time
                     else:
-                        rsi = self.cached_rsi[pair]
+                        rsi = None
 
                     # --- STOP LOSS CHECK ---
                     open_positions = self.state_managers[pair].get_open_positions(
                     )
                     if open_positions:
                         for position in open_positions:
-                            # Bereken de stop loss drempel (bijv. -5% van de aankoopprijs)
                             stop_loss_threshold = position["price"] * (
-                                1 +
-                                self.config.get(
-                                    "STOP_LOSS_PERCENTAGE", -5) / 100
-                            )
+                                1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
                             if current_price <= stop_loss_threshold:
                                 self.log_message(
                                     f"⛔️ Stop loss triggered for {pair}: current price {current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
@@ -155,18 +163,15 @@ class ScalpingBot:
                         self.log_message(
                             f"✅ Current price for {pair}: {current_price:.2f} EUR, RSI={rsi:.2f}")
 
-                        # Verkooplogica: Als de RSI boven de SELL_THRESHOLD komt en de winst voldoet aan de drempel
+                        # Verkooplogica
                         if rsi >= self.config["SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
-                                    # Bereken het winstpercentage via de StateManager
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
                                         pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
                                     )
-                                    # Bereken de absolute winst in valuta
                                     absolute_profit = (current_price * pos["quantity"] * (
                                         1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
-
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
                                             f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
@@ -184,12 +189,11 @@ class ScalpingBot:
                                             to_slack=False
                                         )
 
-                        # Kooplogica: Als de RSI onder de BUY_THRESHOLD ligt
+                        # Kooplogica
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
-                                # Verdeel het totaal toegewezen budget voor dit paar over het maximaal aantal trades
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
                                     f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). "
@@ -208,7 +212,6 @@ class ScalpingBot:
                                     to_slack=False
                                 )
 
-                # Wacht asynchroon de CHECK_INTERVAL af
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
             self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
@@ -217,8 +220,10 @@ class ScalpingBot:
 
 
 if __name__ == "__main__":
+    import argparse
+
     parser = argparse.ArgumentParser(
-        description="Asynchroon ScalpingBot met dynamische configuratie, multi-trade ondersteuning en een aparte RSI-interval."
+        description="Asynchroon ScalpingBot met dynamische configuratie, multi-trade ondersteuning en historische data voor directe RSI-berekening."
     )
     parser.add_argument(
         "--config",
@@ -226,7 +231,6 @@ if __name__ == "__main__":
         default="scalper.json",
         help="Pad naar het JSON-configuratiebestand (default: scalper.json)"
     )
-    # De command-line parameter voor botnaam is verwijderd, aangezien deze nu uit de JSON-configuratie komt.
     args = parser.parse_args()
 
     config_path = os.path.abspath(args.config)
