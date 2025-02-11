@@ -1,8 +1,0 @@
-{
-  "API_KEY": "71b0d2a9390df5e699b2a413b139de0f568b846e849fb8f65bbfbafb9a0a84da",
-  "API_SECRET": "0339731eef1657ae2dd0297d351bc29d8debe0d912abd13a179b60d5c836cd4d664f7af16df84aadbc643f121bdb31ecb3adf66ddc76d76ce6f8f8b42fa3405f",
-  "RESTURL": "https://api.bitvavo.com/v2",
-  "WSURL": "wss://ws.bitvavo.com/v2/",
-  "ACCESSWINDOW": 10000,
-  "DEBUGGING": false
-}
