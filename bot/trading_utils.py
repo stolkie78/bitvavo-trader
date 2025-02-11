@@ -27,14 +27,17 @@ class TradingUtils:
                     ticker = json.loads(ticker)
                 if "price" in ticker:
                     price = float(ticker["price"])
-                    logging.debug("Fetched current price for %s: %s", pair, price)
+                    logging.debug(
+                        "Fetched current price for %s: %s", pair, price)
                     return price
                 else:
                     raise ValueError(f"Unexpected response format: {ticker}")
             except Exception as e:
-                logging.warning("Poging %d om huidige prijs op te halen voor %s mislukt: %s", attempt, pair, e)
+                logging.warning(
+                    "Poging %d om huidige prijs op te halen voor %s mislukt: %s", attempt, pair, e)
                 if attempt == retries:
-                    raise RuntimeError(f"Error fetching current price for {pair}: {e}") from e
+                    raise RuntimeError(
+                        f"Error fetching current price for {pair}: {e}") from e
                 time.sleep(delay)
 
     @staticmethod
@@ -48,7 +51,8 @@ class TradingUtils:
         """
         if len(price_history) < window_size:
             return None
-        rsi_indicator = RSIIndicator(pd.Series(price_history), window=window_size)
+        rsi_indicator = RSIIndicator(
+            pd.Series(price_history), window=window_size)
         return rsi_indicator.rsi().iloc[-1]
 
     @staticmethod
@@ -69,33 +73,36 @@ class TradingUtils:
                 if isinstance(balance_data, str):
                     balance_data = json.loads(balance_data)
 
-                # Als we een flat dictionary hebben (bijv. {"BTC": 0.001, "ETH": 0.5, "EUR": 60.00})
                 if isinstance(balance_data, dict) and not isinstance(balance_data, list):
-                    # Als alle values numeriek zijn, gaan we ervan uit dat de keys direct de valuta's zijn.
                     if all(isinstance(v, (int, float)) for v in balance_data.values()):
                         if asset in balance_data:
                             balance = float(balance_data[asset])
-                            logging.debug("Fetched account balance for %s: %s", asset, balance)
+                            logging.debug(
+                                "Fetched account balance for %s: %s", asset, balance)
                             return balance
                         else:
-                            raise ValueError(f"Saldo voor asset {asset} niet gevonden in flat dict")
+                            raise ValueError(
+                                f"Saldo voor asset {asset} niet gevonden in flat dict")
                     else:
                         balance_data = balance_data.values()
 
-                # Ga ervan uit dat balance_data een iterabele is van entries (bijv. een lijst van dictionaries)
                 for entry in balance_data:
                     if not isinstance(entry, dict):
                         continue
-                    asset_key = entry.get("asset") or entry.get("symbol") or entry.get("currency")
+                    asset_key = entry.get("asset") or entry.get(
+                        "symbol") or entry.get("currency")
                     if asset_key == asset:
                         balance = float(entry.get("available", 0.0))
-                        logging.debug("Fetched account balance for %s: %s", asset, balance)
+                        logging.debug(
+                            "Fetched account balance for %s: %s", asset, balance)
                         return balance
                 raise ValueError(f"Saldo voor asset {asset} niet gevonden")
             except Exception as e:
-                logging.warning("Poging %d om account balance voor %s op te halen mislukt: %s", attempt, asset, e)
+                logging.warning(
+                    "Poging %d om account balance voor %s op te halen mislukt: %s", attempt, asset, e)
                 if attempt == retries:
-                    raise RuntimeError(f"Error fetching account balance for {asset}: {e}") from e
+                    raise RuntimeError(
+                        f"Error fetching account balance for {asset}: {e}") from e
                 time.sleep(delay)
 
     @staticmethod
@@ -128,14 +135,49 @@ class TradingUtils:
 
         for attempt in range(1, retries + 1):
             try:
-                order = bitvavo.placeOrder(market, side, "market", {"amount": amount})
-                # Controleer op een eventuele error in de response
+                order = bitvavo.placeOrder(
+                    market, side, "market", {"amount": amount})
                 if isinstance(order, dict) and order.get("error"):
                     raise ValueError(f"API error: {order.get('error')}")
                 logging.debug("Placed order for %s: %s", market, order)
                 return order
             except Exception as e:
-                logging.warning("Poging %d voor orderplaatsing op %s mislukt: %s", attempt, market, e)
+                logging.warning(
+                    "Poging %d voor orderplaatsing op %s mislukt: %s", attempt, market, e)
                 if attempt == retries:
-                    raise RuntimeError(f"Error placing {side} order for {market}: {e}") from e
+                    raise RuntimeError(
+                        f"Error placing {side} order for {market}: {e}") from e
+                time.sleep(delay)
+
+    @staticmethod
+    def get_order_details(bitvavo, order_id, retries=3, delay=2):
+        """
+        Haalt de order details op via de Bitvavo API.
+        
+        :param bitvavo: Geconfigureerde Bitvavo API-client.
+        :param order_id: Het order ID waarvan de details moeten worden opgehaald.
+        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
+        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
+        :return: Een dictionary met order details.
+        :raises: RuntimeError als na alle pogingen de details niet opgehaald kunnen worden.
+        """
+        for attempt in range(1, retries + 1):
+            try:
+                # Voorbeeld: maak een API-aanroep naar de order status endpoint.
+                order_details = bitvavo.orderStatus(order_id)
+                if isinstance(order_details, str):
+                    order_details = json.loads(order_details)
+                if "orderId" in order_details:
+                    logging.debug("Fetched order details for %s: %s",
+                                  order_id, order_details)
+                    return order_details
+                else:
+                    raise ValueError(
+                        f"Unexpected response format: {order_details}")
+            except Exception as e:
+                logging.warning(
+                    "Poging %d om order details voor %s op te halen mislukt: %s", attempt, order_id, e)
+                if attempt == retries:
+                    raise RuntimeError(
+                        f"Error retrieving order details for {order_id}: {e}") from e
                 time.sleep(delay)
