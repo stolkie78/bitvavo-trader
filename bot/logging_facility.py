@@ -17,6 +17,7 @@ class LoggingFacility:
         """
         self.console_logger = logging.getLogger("console")
         self.console_logger.setLevel(logging.INFO)
+        self.console_logger.propagate = False
         # Voeg alleen een handler toe als er nog geen handlers zijn
         if not self.console_logger.handlers:
             console_handler = logging.StreamHandler()

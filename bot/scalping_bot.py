@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Asynchroon ScalpingBot met ondersteuning voor multi-posities en stop loss.
     """
-    VERSION = "0.1.25"
+    VERSION = "0.1.26"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
