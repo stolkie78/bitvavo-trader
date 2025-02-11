@@ -14,31 +14,56 @@ spec:
       labels:
         app: test-scalper
     spec:
+      initContainers:
+      - name: copy-config
+        image: busybox
+        command:
+        - sh
+        - -c
+        - |
+          echo "Inhoud van /scalper:" && ls -la /scalper
+          echo "Inhoud van /connection:" && ls -la /connection
+          cp -rL /scalper/* /merged/ && cp -rL /connection/* /merged/
+          echo "Inhoud van /merged:" && ls -la /merged
+        volumeMounts:
+        - name: scalper-config
+          mountPath: /scalper
+        - name: connection-config
+          mountPath: /connection
+        - name: merged-config
+          mountPath: /merged
+
       containers:
       - name: bitvavo-scalper
-        image: bitvavo-scalper:latest
+        image: bitvavo-scalper:0.1.23
         resources:
           limits:
-            memory: "256Mi" # Maximum geheugenlimiet
-            cpu: "500m" # Maximum CPU (halve core)
+            memory: "256Mi"
+            cpu: "500m"
           requests:
-            memory: "128Mi" # Minimum geheugenrequest
-            cpu: "250m" # Minimum CPU (kwart van een core)
+            memory: "128Mi"
+            cpu: "250m"
+        env: # Voeg hier eventueel andere environment variables toe
         volumeMounts:
-        - name: config-volume
+        - name: merged-config
           mountPath: /app/config
         - name: data-volume
           mountPath: /app/data
         args:
         - "--config"
-        - "/app/config/scalper.json" # Pad naar het configuratiebestand in de container
+        - "/app/config/scalper.json"
+        ports:
+        - containerPort: 8080
+          name: http
       volumes:
-      - name: config-volume
+      - name: scalper-config
         configMap:
-          name: test-scalper
-          items:
-          - key: scalper.json
-            path: scalper.json
+          name: scalper-config
+      - name: connection-config
+        configMap:
+          name: connection-config
+      - name: merged-config
+        emptyDir: {}
       - name: data-volume
         hostPath:
-          path: /data #Pas dit pad aan naar jouw omgeving
+          path: /data # Pas dit pad aan naar jouw omgeving
