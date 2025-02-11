@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Asynchroon ScalpingBot met ondersteuning voor multi-posities en stop loss.
     """
-    VERSION = "0.1.26"
+    VERSION = "0.1.27"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -51,8 +51,9 @@ class ScalpingBot:
                     interval=self.rsi_interval
                 )
                 self.price_history[pair] = historical_prices
+                historical_prices_len = len(historical_prices)
                 self.log_message(
-                    f"Historische prijzen voor {pair} ingeladen: {historical_prices}")
+                    f"Historische prijzen voor {pair} ingeladen: {historical_prices_len}")
             except Exception as e:
                 self.log_message(
                     f"⚠️ Historische prijzen voor {pair} konden niet worden opgehaald: {e}")
@@ -60,8 +61,7 @@ class ScalpingBot:
                 self.price_history[pair] = []
 
         self.pair_budgets = {
-            pair: (self.config["TOTAL_BUDGET"] *
-                   self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
+            pair: (self.config["TOTAL_BUDGET"] * self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
 
@@ -93,28 +93,17 @@ class ScalpingBot:
     def log_startup_parameters(self):
         """Logt de opstartparameters van de bot."""
         startup_info = {
-            "version": self.VERSION,
-            "bot_name": self.bot_name,
-            "startup_parameters": vars(self.args),
-            "config_file": self.args.config,
-            "trading_pairs": self.config.get("PAIRS", []),
-            "total_budget": self.config.get("TOTAL_BUDGET", "N/A"),
-            "RSI_POINTS": self.rsi_points,
-            # laten we hier de waarde in uppercase tonen
-            "RSI_INTERVAL": self.rsi_interval.upper()
+            **self.config
         }
         self.log_message("🚀 Starting ScalpingBot", to_slack=True)
-        self.log_message(
-            f"📊 Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
+        self.log_message(f"⚠️ Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     async def run(self):
         """Voert de hoofdloop van de bot asynchroon uit."""
         self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
             while True:
-                self.log_message(f"📊 New cycle started at {datetime.now()}")
-                self.log_message(
-                    f"📈 Current budget per pair: {self.pair_budgets}")
+                self.log_message(f"🐌 New cycle started at {datetime.now()}")
                 current_time = datetime.now()
 
                 # Itereer over elk crypto-paar
@@ -160,8 +149,14 @@ class ScalpingBot:
 
                     # --- RSI GEBASEERDE TRADING LOGICA ---
                     if rsi is not None:
-                        self.log_message(
-                            f"✅ Current price for {pair}: {current_price:.2f} EUR, RSI={rsi:.2f}")
+
+                        if current_price < 1:
+                            # Gebruik 8 decimalen als de prijs lager is dan 1 (bijvoorbeeld voor SHIB-EUR)
+                            price_str = f"{current_price:.8f}"
+                        else:
+                            price_str = f"{current_price:.2f}"
+
+                        self.log_message(f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
 
                         # Verkooplogica
                         if rsi >= self.config["SELL_THRESHOLD"]:
@@ -185,7 +180,7 @@ class ScalpingBot:
                                         )
                                     else:
                                         self.log_message(
-                                            f"⚠️ Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                            f"🤚 Skipping sell for trade in {pair} (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
                                             to_slack=False
                                         )
 
@@ -208,7 +203,7 @@ class ScalpingBot:
                                 )
                             else:
                                 self.log_message(
-                                    f"ℹ️ Not buying {pair} as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
+                                    f"🤚 Not buying {pair} as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
                                     to_slack=False
                                 )
 
@@ -243,8 +238,7 @@ if __name__ == "__main__":
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
 
     state_managers = {
-        pair: StateManager(pair, logger, bitvavo_instance,
-                           demo_mode=config.get("DEMO_MODE", False))
+        pair: StateManager(pair, logger, bitvavo_instance, demo_mode=config.get("DEMO_MODE", False))
         for pair in config["PAIRS"]
     }
 
