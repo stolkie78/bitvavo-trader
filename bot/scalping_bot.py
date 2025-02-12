@@ -14,15 +14,13 @@ import json
 
 class ScalpingBot:
     """
-    Asynchroon ScalpingBot met ondersteuning voor multi-posities en stop loss.
+    Async Scalping bot
     """
-    VERSION = "0.1.28"
+    VERSION = "0.1.29"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
-        Initialiseert de ScalpingBot.
-        
-        De botnaam wordt ingeladen vanuit de JSON-configuratie via het veld "PROFILE".
+        Init of the bot
         """
         self.config = config
         self.logger = logger
@@ -53,10 +51,10 @@ class ScalpingBot:
                 self.price_history[pair] = historical_prices
                 historical_prices_len = len(historical_prices)
                 self.log_message(
-                    f"Historische prijzen voor {pair} ingeladen: {historical_prices_len}")
+                    f"Price candles for {pair} loaded: {historical_prices_len}")
             except Exception as e:
                 self.log_message(
-                    f"⚠️ Historische prijzen voor {pair} konden niet worden opgehaald: {e}")
+                    f"⚠️ Price candles for {pair} unavailable: {e}")
                 # fallback indien ophalen mislukt
                 self.price_history[pair] = []
 
@@ -72,7 +70,7 @@ class ScalpingBot:
         )
 
     def load_portfolio(self):
-        """Laadt de portfolio uit een JSON-bestand."""
+        """Loads portfolio from portfolio.json"""
         if os.path.exists(self.portfolio_file):
             try:
                 with open(self.portfolio_file, "r") as f:
@@ -86,12 +84,12 @@ class ScalpingBot:
         return {}
 
     def log_message(self, message: str, to_slack: bool = False):
-        """Voegt de botnaam toe aan het bericht en logt het."""
+        """Standard log message format"""
         prefixed_message = f"[{self.bot_name}] {message}"
         self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
 
     def log_startup_parameters(self):
-        """Logt de opstartparameters van de bot."""
+        """Show startup information"""
         startup_info = {
             **self.config
         }
@@ -99,25 +97,25 @@ class ScalpingBot:
         self.log_message(f"⚠️ Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     async def run(self):
-        """Voert de hoofdloop van de bot asynchroon uit."""
+        """Main async loop"""
         self.log_message(f"📊 Trading started at {datetime.now()}")
         try:
             while True:
                 self.log_message(f"🐌 New cycle started at {datetime.now()}")
                 current_time = datetime.now()
 
-                # Itereer over elk crypto-paar
+                # Fetch current price for RSI calculation
                 for pair in self.config["PAIRS"]:
                     current_price = await asyncio.to_thread(
                         TradingUtils.fetch_current_price, self.bitvavo, pair
                     )
 
-                    # Voeg de nieuwe prijs toe en behoud altijd het RSI_POINTS aantal prijzen
+                    # Add current price to RSI array
                     self.price_history[pair].append(current_price)
                     if len(self.price_history[pair]) > self.rsi_points:
                         self.price_history[pair].pop(0)
 
-                    # Bereken de RSI op basis van de beschikbare data
+                    # Calculate RSI 
                     if len(self.price_history[pair]) >= self.rsi_points:
                         rsi = await asyncio.to_thread(
                             TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
@@ -125,7 +123,7 @@ class ScalpingBot:
                     else:
                         rsi = None
 
-                    # --- STOP LOSS CHECK ---
+                    # Check stop-loss conditions
                     open_positions = self.state_managers[pair].get_open_positions(
                     )
                     if open_positions:
@@ -147,18 +145,17 @@ class ScalpingBot:
                                     self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
-                    # --- RSI GEBASEERDE TRADING LOGICA ---
+                    # Start RSI calculations
                     if rsi is not None:
-
                         if current_price < 1:
-                            # Gebruik 8 decimalen als de prijs lager is dan 1 (bijvoorbeeld voor SHIB-EUR)
+                            # Determine digits for high numerbered cryptos
                             price_str = f"{current_price:.8f}"
                         else:
                             price_str = f"{current_price:.2f}"
 
                         self.log_message(f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
 
-                        # Verkooplogica
+                        # Sell Logic
                         if rsi >= self.config["SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
@@ -184,7 +181,7 @@ class ScalpingBot:
                                             to_slack=False
                                         )
 
-                        # Kooplogica
+                        # Buy Logic
                         elif rsi <= self.config["BUY_THRESHOLD"]:
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)

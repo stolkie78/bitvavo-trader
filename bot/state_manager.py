@@ -202,7 +202,7 @@ class StateManager:
                             quantity}", to_console=True, to_slack=False)
             return
 
-        # Gebruik de opgeslagen 'spent' als kostenbasis indien beschikbaar
+        # Add spent column with real buy amount
         cost_basis = position.get("spent", position["price"] * quantity)
         revenue = price * quantity * (1 - fee_percentage / 100)
         estimated_profit = revenue - cost_basis
@@ -363,7 +363,7 @@ class StateManager:
             "quantity": quantity,
             "timestamp": datetime.now().isoformat()
         }
-        # Voeg de winst in euro's toe voor sell trades
+        # Add profit in EUR to all sell trades
         if trade_type.lower() == "sell" and profit is not None:
             trade["profit_eur"] = profit
 

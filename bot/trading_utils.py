@@ -11,14 +11,14 @@ class TradingUtils:
     def fetch_current_price(bitvavo, pair, retries=3, delay=2):
         """
         Fetches the current price of a trading pair using the Bitvavo API.
-        Voert automatisch retries uit bij tijdelijke fouten.
+        Automatically performs retries for temporary errors.
         
-        :param bitvavo: Geconfigureerde Bitvavo API-client.
-        :param pair: Trading pair, bijvoorbeeld "BTC-EUR".
-        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
-        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
-        :return: Huidige prijs als float.
-        :raises: RuntimeError als geen geldige response wordt ontvangen na alle pogingen.
+        :param bitvavo: Configured Bitvavo API client.
+        :param pair: Trading pair, for example "BTC-EUR".
+        :param retries: Number of attempts before throwing an error (default: 3).
+        :param delay: Delay in seconds between attempts (default: 2).
+        :return: Current price as a float.
+        :raises: RuntimeError if a valid response is not received after all attempts.
         """
         for attempt in range(1, retries + 1):
             try:
@@ -34,7 +34,7 @@ class TradingUtils:
                     raise ValueError(f"Unexpected response format: {ticker}")
             except Exception as e:
                 logging.warning(
-                    "Poging %d om huidige prijs op te halen voor %s mislukt: %s", attempt, pair, e)
+                    "Attempt %d to fetch current price for %s failed: %s", attempt, pair, e)
                 if attempt == retries:
                     raise RuntimeError(
                         f"Error fetching current price for {pair}: {e}") from e
@@ -45,9 +45,9 @@ class TradingUtils:
         """
         Calculates the RSI based on the price history.
         
-        :param price_history: Lijst met historische prijzen.
-        :param window_size: Het venster voor de RSI-berekening.
-        :return: De meest recente RSI-waarde of None indien er onvoldoende data is.
+        :param price_history: List of historical prices.
+        :param window_size: The window for the RSI calculation.
+        :return: The most recent RSI value or None if there is insufficient data.
         """
         if len(price_history) < window_size:
             return None
@@ -58,14 +58,14 @@ class TradingUtils:
     @staticmethod
     def get_account_balance(bitvavo, asset="EUR", retries=3, delay=2):
         """
-        Haalt het accountsaldo op voor het opgegeven asset via de Bitvavo API met retry-opties.
+        Retrieves the account balance for the specified asset via the Bitvavo API with retry options.
         
-        :param bitvavo: De Bitvavo API-client.
-        :param asset: Het asset symbool waarvan het saldo wordt opgehaald (default "EUR").
-        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
-        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
-        :return: Het beschikbare saldo voor het asset als float.
-        :raises: RuntimeError indien het ophalen van het saldo mislukt na alle pogingen.
+        :param bitvavo: The Bitvavo API client.
+        :param asset: The asset symbol for which the balance is retrieved (default "EUR").
+        :param retries: Number of attempts before throwing an error (default: 3).
+        :param delay: Delay in seconds between attempts (default: 2).
+        :return: The available balance for the asset as a float.
+        :raises: RuntimeError if retrieving the balance fails after all attempts.
         """
         for attempt in range(1, retries + 1):
             try:
@@ -82,7 +82,7 @@ class TradingUtils:
                             return balance
                         else:
                             raise ValueError(
-                                f"Saldo voor asset {asset} niet gevonden in flat dict")
+                                f"Balance for asset {asset} not found in flat dict")
                     else:
                         balance_data = balance_data.values()
 
@@ -96,10 +96,10 @@ class TradingUtils:
                         logging.debug(
                             "Fetched account balance for %s: %s", asset, balance)
                         return balance
-                raise ValueError(f"Saldo voor asset {asset} niet gevonden")
+                raise ValueError(f"Balance for asset {asset} not found")
             except Exception as e:
                 logging.warning(
-                    "Poging %d om account balance voor %s op te halen mislukt: %s", attempt, asset, e)
+                    "Attempt %d to fetch account balance for %s failed: %s", attempt, asset, e)
                 if attempt == retries:
                     raise RuntimeError(
                         f"Error fetching account balance for {asset}: {e}") from e
@@ -108,18 +108,18 @@ class TradingUtils:
     @staticmethod
     def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
         """
-        Plaatst een buy of sell order via de Bitvavo API of simuleert deze in demo mode,
-        met retry-opties voor tijdelijke fouten.
+        Places a buy or sell order via the Bitvavo API or simulates it in demo mode,
+        with retry options for temporary errors.
         
-        :param bitvavo: Geconfigureerde Bitvavo API-client.
-        :param market: Trading pair, bv. "BTC-EUR".
-        :param side: "buy" of "sell".
-        :param amount: De hoeveelheid om te kopen of verkopen.
-        :param demo_mode: Of de order gesimuleerd wordt (default: False).
-        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
-        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
-        :return: Response van de Bitvavo API of een gesimuleerde order.
-        :raises: RuntimeError indien de orderplaatsing mislukt na alle pogingen.
+        :param bitvavo: Configured Bitvavo API client.
+        :param market: Trading pair, e.g. "BTC-EUR".
+        :param side: "buy" or "sell".
+        :param amount: The amount to buy or sell.
+        :param demo_mode: Whether the order is simulated (default: False).
+        :param retries: Number of attempts before throwing an error (default: 3).
+        :param delay: Delay in seconds between attempts (default: 2).
+        :return: Response from the Bitvavo API or a simulated order.
+        :raises: RuntimeError if placing the order fails after all attempts.
         """
         if demo_mode:
             simulated_order = {
@@ -143,7 +143,7 @@ class TradingUtils:
                 return order
             except Exception as e:
                 logging.warning(
-                    "Poging %d voor orderplaatsing op %s mislukt: %s", attempt, market, e)
+                    "Attempt %d to place order on %s failed: %s", attempt, market, e)
                 if attempt == retries:
                     raise RuntimeError(
                         f"Error placing {side} order for {market}: {e}") from e
@@ -152,18 +152,17 @@ class TradingUtils:
     @staticmethod
     def get_order_details(bitvavo, order_id, retries=3, delay=2):
         """
-        Haalt de order details op via de Bitvavo API.
+        Retrieves the order details via the Bitvavo API.
         
-        :param bitvavo: Geconfigureerde Bitvavo API-client.
-        :param order_id: Het order ID waarvan de details moeten worden opgehaald.
-        :param retries: Aantal pogingen voordat een fout wordt opgegooid (default: 3).
-        :param delay: Wachtduur in seconden tussen pogingen (default: 2).
-        :return: Een dictionary met order details.
-        :raises: RuntimeError als na alle pogingen de details niet opgehaald kunnen worden.
+        :param bitvavo: Configured Bitvavo API client.
+        :param order_id: The order ID for which the details need to be retrieved.
+        :param retries: Number of attempts before throwing an error (default: 3).
+        :param delay: Delay in seconds between attempts (default: 2).
+        :return: A dictionary with the order details.
+        :raises: RuntimeError if the details cannot be retrieved after all attempts.
         """
         for attempt in range(1, retries + 1):
             try:
-                # Voorbeeld: maak een API-aanroep naar de order status endpoint.
                 order_details = bitvavo.orderStatus(order_id)
                 if isinstance(order_details, str):
                     order_details = json.loads(order_details)
@@ -176,7 +175,7 @@ class TradingUtils:
                         f"Unexpected response format: {order_details}")
             except Exception as e:
                 logging.warning(
-                    "Poging %d om order details voor %s op te halen mislukt: %s", attempt, order_id, e)
+                    "Attempt %d to fetch order details for %s failed: %s", attempt, order_id, e)
                 if attempt == retries:
                     raise RuntimeError(
                         f"Error retrieving order details for {order_id}: {e}") from e
@@ -185,20 +184,20 @@ class TradingUtils:
     @staticmethod
     def fetch_historical_prices(bitvavo, pair, limit=14, interval="1m"):
         """
-        Haalt historische sluitingsprijzen op voor een gegeven trading pair met één API-aanroep.
+        Fetches historical closing prices for a given trading pair with a single API call.
 
-        :param bitvavo: Geconfigureerde Bitvavo API-client.
-        :param pair: Trading pair, bijvoorbeeld "BTC-EUR".
-        :param limit: Aantal historische datapoints (default: 14).
-        :param interval: Candle-interval (bijv. "1m" voor 1 minuut).
-        :return: Een lijst met sluitingsprijzen (floats).
-        :raises: RuntimeError als de historische data niet in het verwachte format wordt teruggegeven.
+        :param bitvavo: Configured Bitvavo API client.
+        :param pair: Trading pair, for example "BTC-EUR".
+        :param limit: Number of historical datapoints (default: 14).
+        :param interval: Candle interval (e.g. "1m" for 1 minute).
+        :return: A list of closing prices (floats).
+        :raises: RuntimeError if the historical data is not returned in the expected format.
         """
-        # Geef de parameters mee als dictionary (wat vaak wel de API verwacht)
+        # Pass parameters as a dictionary
         candles = bitvavo.candles(pair, interval, {"limit": limit})
         if isinstance(candles, str):
             candles = json.loads(candles)
-        # Controleer of we een lijst met candles hebben en dat elk candle een iterabele is
+        # Check if the response is a list of candles and that each candle is iterable
         if not isinstance(candles, list) or not candles or not isinstance(candles[0], (list, tuple)):
             raise RuntimeError(
                 f"Unexpected response format for candles: {candles}")
