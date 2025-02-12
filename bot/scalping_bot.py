@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Async Scalping bot
     """
-    VERSION = "0.2.1"
+    VERSION = "0.2.2"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -39,7 +39,6 @@ class ScalpingBot:
         self.price_history = {pair: [] for pair in config["PAIRS"]}
 
         # EMA settings
-        self.ema_window = config.get("EMA_WINDOW", 50)
         self.ema_profiles = config.get(
             "EMA_PROFILES", {"ULTRASHORT": 9, "SHORT": 21, "MEDIUM": 50, "LONG": 200})
         self.selected_ema = self.ema_profiles.get(config.get(
@@ -49,7 +48,7 @@ class ScalpingBot:
         # Get historical prices
         for pair in config["PAIRS"]:
             try:
-                required_candles = max(self.rsi_points, self.ema_window)
+                required_candles = max(self.rsi_points, self.selected_ema)
                 historical_prices = TradingUtils.fetch_historical_prices(
                     self.bitvavo, pair, limit=required_candles, interval=self.rsi_interval
                 )
@@ -130,9 +129,8 @@ class ScalpingBot:
                     if len(self.price_history[pair]) > self.rsi_points:
                         self.price_history[pair].pop(0)
 
-                    # Voeg huidige prijs toe aan EMA array
-                    self.ema_history[pair].append(current_price)
-                    if len(self.ema_history[pair]) > self.ema_window:
+
+                    if len(self.ema_history[pair]) > self.selected_ema:
                         self.ema_history[pair].pop(0)
 
                     # Bereken EMA als er genoeg data is
@@ -222,7 +220,7 @@ class ScalpingBot:
                             if len(open_positions) < max_trades:
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 Buying {pair}. PRICE: {current_price:.2f} - RSI={rsi:.2f} - EMA={ema_str}. Open trades: {len(open_positions)}(max allowed: {max_trades}). Investment per trade: {investment_per_trade: .2f}",
+                                    f"🟢 Buying {pair}. PRICE: {price_str} - RSI={rsi:.2f} - EMA={ema_str}. Open trades: {len(open_positions)}(max allowed: {max_trades}). Investment per trade: {investment_per_trade: .2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
