@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.30"
+    VERSION = "0.2.0"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -33,34 +33,41 @@ class ScalpingBot:
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
 
-        # Haal de nieuwe RSI-opties uit de config (in uppercase) met fallback-waarden.
-        self.rsi_points = config.get("RSI_POINTS", 14)  # aantal RSI punten
-        # RSI_INTERVAL is het candle-interval. Omdat de API meestal lowercase verwacht, converteren we deze:
+        # Get new RSI points
+        self.rsi_points = config.get("RSI_POINTS", 50) 
         self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
+        self.price_history = {pair: [] for pair in config["PAIRS"]}
 
-        # Pre-populeer de prijsgeschiedenis per trading pair met historische data
-        self.price_history = {}
+        # EMA settings
+        self.ema_window = config.get("EMA_WINDOW", 50)
+        self.ema_history = {pair: [] for pair in config["PAIRS"]}
+
+
+        # Get historical prices
         for pair in config["PAIRS"]:
             try:
+                required_candles = max(self.rsi_points, self.ema_window)
                 historical_prices = TradingUtils.fetch_historical_prices(
-                    self.bitvavo,
-                    pair,
-                    limit=self.rsi_points,
-                    interval=self.rsi_interval
+                    self.bitvavo, pair, limit=required_candles, interval=self.rsi_interval
                 )
-                self.price_history[pair] = historical_prices
-                historical_prices_len = len(historical_prices)
-                self.log_message(
-                    f"Price candles for {pair} loaded: {historical_prices_len}")
+
+                if len(historical_prices) >= required_candles:
+                    self.price_history[pair] = historical_prices.copy()
+                    self.ema_history[pair] = historical_prices.copy()
+                    self.log_message(
+                        f"✅ {pair}: {len(historical_prices)} load historical prices for EMA and RSI.")
+                else:
+                    self.log_message(
+                        f"⚠️ {pair}: Not enough data ({len(historical_prices)}, need: {required_candles}).")
             except Exception as e:
                 self.log_message(
-                    f"⚠️ Price candles for {pair} unavailable: {e}")
-                # fallback indien ophalen mislukt
+                    f"❌ Error getting historical prices {pair}: {e}")
                 self.price_history[pair] = []
+                self.ema_history[pair] = []
 
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] *
-                   self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
+                self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
 
@@ -70,6 +77,7 @@ class ScalpingBot:
             to_console=True
         )
 
+    # Load the portfolio.json file
     def load_portfolio(self):
         """Loads portfolio from portfolio.json"""
         if os.path.exists(self.portfolio_file):
@@ -84,11 +92,13 @@ class ScalpingBot:
                     f"👽❌ Error loading portfolio: {e}", to_console=True)
         return {}
 
+    # Default logger settings
     def log_message(self, message: str, to_slack: bool = False):
         """Standard log message format"""
         prefixed_message = f"[{self.bot_name}] {message}"
         self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
 
+    # Show at startup
     def log_startup_parameters(self):
         """Show startup information"""
         startup_info = {
@@ -116,6 +126,18 @@ class ScalpingBot:
                     self.price_history[pair].append(current_price)
                     if len(self.price_history[pair]) > self.rsi_points:
                         self.price_history[pair].pop(0)
+
+                    # Voeg huidige prijs toe aan EMA array
+                    self.ema_history[pair].append(current_price)
+                    if len(self.ema_history[pair]) > self.ema_window:
+                        self.ema_history[pair].pop(0)
+
+                    # Bereken EMA als er genoeg data is
+                    if len(self.ema_history[pair]) >= self.ema_window:
+                        ema = await asyncio.to_thread(TradingUtils.calculate_ema, self.ema_history[pair], self.ema_window
+                        )
+                    else:
+                        ema = None
 
                     # Calculate RSI
                     if len(self.price_history[pair]) >= self.rsi_points:
@@ -147,19 +169,25 @@ class ScalpingBot:
                                     self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
-                    # Start RSI calculations
+                    # Determine digits for high numerbered cryptos
                     if rsi is not None:
                         if current_price < 1:
                             # Determine digits for high numerbered cryptos
                             price_str = f"{current_price:.8f}"
                         else:
                             price_str = f"{current_price:.2f}"
-
+                    if ema is not None:
+                        if ema < 1:
+                            
+                            ema_str = f"{ema:.8f} EUR"
+                        else:
+                            ema_str = f"{ema:.2f} EUR"
+                    
                         self.log_message(
-                            f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
+                            f"💎 Current price for {pair}: {price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}")
 
                         # Sell Logic
-                        if rsi >= self.config["SELL_THRESHOLD"]:
+                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and (ema is None or current_price < ema):
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
@@ -169,7 +197,7 @@ class ScalpingBot:
                                         1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                            f"🔴 Selling trade for {pair} (bought at {pos['price']:.2f}). RSI={rsi:.2f} - EMA={ema_str} - PRICE: {current_price: .2f} - PROFIT: {profit_percentage: .2f} % / {absolute_profit: .2f} EUR",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -185,13 +213,13 @@ class ScalpingBot:
                                         )
 
                         # Buy Logic
-                        elif rsi <= self.config["BUY_THRESHOLD"]:
+                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and (ema is None or current_price > ema):
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
+                                    f"🟢 Buying {pair}. PRICE: {current_price:.2f} - RSI={rsi:.2f} - EMA={ema_str}. Open trades: {len(open_positions)}(max allowed: {max_trades}). Investment per trade: {investment_per_trade: .2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -217,26 +245,26 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Asynchroon ScalpingBot met dynamische configuratie, multi-trade ondersteuning en historische data voor directe RSI-berekening."
+        description="Async trading bot with RSI and EMA calculation"
     )
     parser.add_argument(
         "--config",
         type=str,
         default="scalper.json",
-        help="Pad naar het JSON-configuratiebestand (default: scalper.json)"
+        help="Path to JSON config file (default: scalper.json)"
     )
     args = parser.parse_args()
 
     config_path = os.path.abspath(args.config)
     if not os.path.exists(config_path):
         raise FileNotFoundError(
-            f"Configuratiebestand niet gevonden: {config_path}")
+            f"File not found: {config_path}")
 
     bitvavo_instance = bitvavo(ConfigLoader.load_config("bitvavo.json"))
     config = ConfigLoader.load_config(config_path)
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
 
-    # Pas de aanroep van StateManager aan zodat de botnaam wordt meegegeven
+    # Statemanager intance
     state_managers = {
         pair: StateManager(
             pair,
