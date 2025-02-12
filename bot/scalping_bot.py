@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Async Scalping bot
     """
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -40,8 +40,11 @@ class ScalpingBot:
 
         # EMA settings
         self.ema_window = config.get("EMA_WINDOW", 50)
+        self.ema_profiles = config.get(
+            "EMA_PROFILES", {"ULTRASHORT": 9, "SHORT": 21, "MEDIUM": 50, "LONG": 200})
+        self.selected_ema = self.ema_profiles.get(config.get(
+            "EMA_PROFILE", "MEDIUM"), 50)  # Default is 50
         self.ema_history = {pair: [] for pair in config["PAIRS"]}
-
 
         # Get historical prices
         for pair in config["PAIRS"]:
@@ -133,8 +136,9 @@ class ScalpingBot:
                         self.ema_history[pair].pop(0)
 
                     # Bereken EMA als er genoeg data is
-                    if len(self.ema_history[pair]) >= self.ema_window:
-                        ema = await asyncio.to_thread(TradingUtils.calculate_ema, self.ema_history[pair], self.ema_window
+                    if len(self.ema_history[pair]) >= self.selected_ema:
+                        ema = await asyncio.to_thread(
+                            TradingUtils.calculate_ema, self.ema_history[pair], self.selected_ema
                         )
                     else:
                         ema = None
@@ -178,7 +182,6 @@ class ScalpingBot:
                             price_str = f"{current_price:.2f}"
                     if ema is not None:
                         if ema < 1:
-                            
                             ema_str = f"{ema:.8f} EUR"
                         else:
                             ema_str = f"{ema:.2f} EUR"
