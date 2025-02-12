@@ -59,7 +59,8 @@ class ScalpingBot:
                 self.price_history[pair] = []
 
         self.pair_budgets = {
-            pair: (self.config["TOTAL_BUDGET"] * self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
+            pair: (self.config["TOTAL_BUDGET"] *
+                   self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
 
@@ -94,7 +95,8 @@ class ScalpingBot:
             **self.config
         }
         self.log_message("🚀 Starting ScalpingBot", to_slack=True)
-        self.log_message(f"⚠️ Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
+        self.log_message(
+            f"⚠️ Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
     async def run(self):
         """Main async loop"""
@@ -115,7 +117,7 @@ class ScalpingBot:
                     if len(self.price_history[pair]) > self.rsi_points:
                         self.price_history[pair].pop(0)
 
-                    # Calculate RSI 
+                    # Calculate RSI
                     if len(self.price_history[pair]) >= self.rsi_points:
                         rsi = await asyncio.to_thread(
                             TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
@@ -153,7 +155,8 @@ class ScalpingBot:
                         else:
                             price_str = f"{current_price:.2f}"
 
-                        self.log_message(f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
+                        self.log_message(
+                            f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
 
                         # Sell Logic
                         if rsi >= self.config["SELL_THRESHOLD"]:
@@ -188,8 +191,7 @@ class ScalpingBot:
                             if len(open_positions) < max_trades:
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). "
-                                    f"Investeringsbedrag per trade: {investment_per_trade:.2f}",
+                                    f"🟢 Buying {pair}. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -234,8 +236,15 @@ if __name__ == "__main__":
     config = ConfigLoader.load_config(config_path)
     logger = LoggingFacility(ConfigLoader.load_config("slack.json"))
 
+    # Pas de aanroep van StateManager aan zodat de botnaam wordt meegegeven
     state_managers = {
-        pair: StateManager(pair, logger, bitvavo_instance, demo_mode=config.get("DEMO_MODE", False))
+        pair: StateManager(
+            pair,
+            logger,
+            bitvavo_instance,
+            demo_mode=config.get("DEMO_MODE", False),
+            bot_name=config.get("PROFILE", "SCALPINGBOT")
+        )
         for pair in config["PAIRS"]
     }
 
