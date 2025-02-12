@@ -16,7 +16,7 @@ class ScalpingBot:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.29"
+    VERSION = "0.1.30"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
