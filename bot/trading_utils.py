@@ -1,3 +1,4 @@
+from ta.trend import EMAIndicator
 import json
 import time
 import logging
@@ -208,3 +209,18 @@ class TradingUtils:
                 f"Error processing candle data for {pair}: {e}") from e
         logging.debug("Fetched historical prices for %s: %s", pair, prices)
         return prices
+
+    @staticmethod
+    def calculate_ema(price_history, window_size):
+        """
+        Berekent de Exponential Moving Average (EMA) op basis van de prijsgegevens.
+    
+        :param price_history: Lijst met historische prijzen.
+        :param window_size: Het venster voor de EMA-berekening.
+        :return: De meest recente EMA-waarde of None als er onvoldoende data is.
+        """
+        if len(price_history) < window_size:
+            return None
+        ema_indicator = EMAIndicator(pd.Series(price_history), window=window_size)
+        return ema_indicator.ema_indicator().iloc[-1]
+    
