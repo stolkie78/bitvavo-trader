@@ -18,7 +18,7 @@ class ScalpingBot:
     """
     Async Scalping Bot met dynamische stoploss en dynamische risicodeling.
     """
-    VERSION = "0.3.0"
+    VERSION = "0.3.1"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -335,3 +335,29 @@ if __name__ == "__main__":
 
     bot = ScalpingBot(config, logger, state_managers, bitvavo_instance, args)
     asyncio.run(bot.run())
+
+def check_stop_loss(self, pair, current_price):
+    """ Controleert of een stop-loss moet worden geactiveerd en verkoopt de positie indien nodig. """
+    open_positions = self.state_managers[pair].get_open_positions()
+    for position in open_positions:
+        stop_loss_price = position["price"] * (1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
+
+        if current_price <= stop_loss_price:
+            self.log_message(
+                f"⛔️ {pair}: Stop loss triggered for {pair}: current price {current_price:.2f} is below threshold {stop_loss_price:.2f}",
+                to_slack=True
+            )
+
+            # Probeer de verkoop met een retry-mechanisme
+            sell_success = self.state_managers[pair].sell_position_with_retry(
+                position,
+                current_price,
+                self.config["TRADE_FEE_PERCENTAGE"],
+                self.config.get("STOP_LOSS_MAX_RETRIES", 3),
+                self.config.get("STOP_LOSS_WAIT_TIME", 5)
+            )
+
+            if sell_success:
+                self.log_message(f"✅ {pair}: Stop-loss verkoop geslaagd voor {current_price:.2f}", to_slack=True)
+            else:
+                self.log_message(f"❌ {pair}: Stop-loss verkoop mislukt, herproberen...", to_slack=True)
