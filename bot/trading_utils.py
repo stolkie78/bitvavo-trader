@@ -224,3 +224,50 @@ class TradingUtils:
         ema_indicator = EMAIndicator(pd.Series(price_history), window=window_size)
         return ema_indicator.ema_indicator().iloc[-1]
     
+    @staticmethod
+    def fetch_historical_candles(bitvavo, pair, limit=15, interval="1m"):
+        """
+        Haalt historische candle-data op en geeft een DataFrame terug met kolommen:
+        'timestamp', 'open', 'high', 'low', 'close' en 'volume'.
+        """
+        candles = bitvavo.candles(pair, interval, {"limit": limit})
+        if isinstance(candles, str):
+            candles = json.loads(candles)
+        data = {
+            "timestamp": [],
+            "open": [],
+            "high": [],
+            "low": [],
+            "close": [],
+            "volume": []
+        }
+        for candle in candles:
+            data["timestamp"].append(candle[0])
+            data["open"].append(float(candle[1]))
+            data["high"].append(float(candle[2]))
+            data["low"].append(float(candle[3]))
+            data["close"].append(float(candle[4]))
+            data["volume"].append(float(candle[5]))
+        return pd.DataFrame(data)
+
+    @staticmethod
+    def calculate_atr(data: pd.DataFrame, period: int = 14):
+        """
+        Bereken de Average True Range (ATR) op basis van de candle-data.
+        
+        Args:
+            data (pd.DataFrame): DataFrame met kolommen 'high', 'low' en 'close'.
+            period (int): Het aantal periodes voor de ATR-berekening.
+        
+        Returns:
+            float: De meest recente ATR-waarde.
+        """
+        high = data["high"]
+        low = data["low"]
+        close = data["close"]
+        tr1 = high - low
+        tr2 = (high - close.shift(1)).abs()
+        tr3 = (low - close.shift(1)).abs()
+        true_range = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr = true_range.rolling(window=period, min_periods=period).mean()
+        return atr.iloc[-1]
