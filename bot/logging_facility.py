@@ -2,7 +2,6 @@ import logging
 import os
 from bot.slack_notifier import SlackNotifier
 
-
 class LoggingFacility:
     """
     A centralized logging facility for both console and Slack logging.

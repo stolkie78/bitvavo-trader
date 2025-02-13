@@ -6,7 +6,6 @@ from datetime import datetime
 import pandas as pd
 from ta.momentum import RSIIndicator
 
-
 class TradingUtils:
     @staticmethod
     def fetch_current_price(bitvavo, pair, retries=3, delay=2):
@@ -169,7 +168,7 @@ class TradingUtils:
                     order_details = json.loads(order_details)
                 if "orderId" in order_details:
                     logging.debug("Fetched order details for %s: %s",
-                                  order_id, order_details)
+                                order_id, order_details)
                     return order_details
                 else:
                     raise ValueError(

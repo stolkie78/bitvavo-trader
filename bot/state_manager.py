@@ -3,9 +3,7 @@ import json
 import threading
 import time
 from datetime import datetime
-
 from bot.trading_utils import TradingUtils  # Ensure this import works correctly
-
 
 class StateManager:
     _lock = threading.Lock()  # Lock to prevent race conditions
@@ -236,13 +234,13 @@ class StateManager:
 
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
         """
-        Execute a stop-loss sell order for a specific position with a retry mechanism.
+        Execute a Stoploss sell order for a specific position with a retry mechanism.
         """
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(quantity)
         if quantity <= 0:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during stop-loss sell: {quantity}",
+                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during Stoploss sell: {quantity}",
                 to_console=True, to_slack=True
             )
             return False
@@ -252,7 +250,7 @@ class StateManager:
             revenue = current_price * quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
             self.logger.log(
-                f"[{self.bot_name}] ⛔️ {self.pair}: Stop-loss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
+                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
 
@@ -271,17 +269,17 @@ class StateManager:
                         )
                 self.save_portfolio()
                 self.logger.log(
-                    f"[{self.bot_name}] 👽 Stop-loss sold {self.pair}: Price={current_price:.2f}, Profit={profit:.2f}",
+                    f"[{self.bot_name}] 👽 Stoploss sold {self.pair}: Price={current_price:.2f}, Profit={profit:.2f}",
                     to_console=True, to_slack=False
                 )
                 return True
             else:
                 self.logger.log(
-                    f"[{self.bot_name}] 👽 Stop-loss sell attempt {attempt} failed for {self.pair}: {order}",
+                    f"[{self.bot_name}] 👽 Stoploss sell attempt {attempt} failed for {self.pair}: {order}",
                     to_console=True
                 )
                 time.sleep(wait_time)
-        self.logger.log(f"[{self.bot_name}] ❌ Stop-loss sell failed for {self.pair} after {max_retries} attempts.",
+        self.logger.log(f"[{self.bot_name}] ❌ Stoploss sell failed for {self.pair} after {max_retries} attempts.",
                         to_console=True)
         return False
 
@@ -441,10 +439,10 @@ class StateManager:
 
     def check_stop_loss(self, current_price, fee_percentage, atr_value=None, atr_multiplier=1.5, stop_loss_percentage=-5, max_retries=3, wait_time=5):
         """
-        Checks if any open position should trigger a stop-loss.
-        For each open position, calculates a dynamic stop-loss:
-          - If atr_value is provided: dynamic_stoploss = position["price"] - (atr_value * atr_multiplier)
-          - Else: uses stop_loss_percentage.
+        Checks if any open position should trigger a Stoploss.
+        For each open position, calculates a dynamic Stoploss:
+        If atr_value is provided: dynamic_stoploss = position["price"] - (atr_value * atr_multiplier)
+        Else: uses stop_loss_percentage.
         If current_price falls below the threshold, attempts to sell via a retry mechanism.
         """
         open_positions = self.get_open_positions()
@@ -464,10 +462,10 @@ class StateManager:
                     position, current_price, fee_percentage, max_retries, wait_time)
                 if success:
                     self.logger.log(
-                        f"✅ {self.pair}: Stop-loss sell succeeded at {current_price:.2f}", to_slack=True)
+                        f"✅ {self.pair}: Stoploss sell succeeded at {current_price:.2f}", to_slack=True)
                 else:
                     self.logger.log(
-                        f"❌ {self.pair}: Stop-loss sell failed, retrying...", to_slack=True)
+                        f"❌ {self.pair}: Stoploss sell failed, retrying...", to_slack=True)
 
     @staticmethod
     def log_portfolio_distribution(pair_budgets, logger, action=""):

@@ -18,7 +18,7 @@ class ScalpingBot:
     """
     Async Scalping Bot with dynamic stoploss and risk allocation.
     """
-    VERSION = "0.4.0"
+    VERSION = "0.4.1"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -140,20 +140,20 @@ class ScalpingBot:
                             TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
                         )
 
+                    # Log current open positions for the pair
+                    open_positions = self.state_managers[pair].get_open_positions()
+                    open_positions_len = len(open_positions)
+
                     # Log price, RSI and EMA
                     if rsi is not None:
                         price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
                     if ema is not None:
                         ema_str = f"{ema:.8f} EUR" if ema < 1 else f"{ema:.2f} EUR"
                         self.log_message(
-                            f"💎 {pair}: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}"
+                            f"💎 {pair}: Price={price_str} EUR - RSI={rsi:.2f} - EMA:{ema_str} - Positions={open_positions_len}"
                         )
 
-                    # Log current open positions for the pair
-                    open_positions = self.state_managers[pair].get_open_positions(
-                    )
-                    self.log_message(
-                        f"📂 {pair}: Open positions: {len(open_positions)}")
+            
 
                     # Check open positions and execute dynamic stoploss via StateManager
                     try:
@@ -169,7 +169,7 @@ class ScalpingBot:
                             f"❌ Error calculating ATR for {pair}: {e}")
                         atr_value = None
 
-                    # Let the StateManager handle stop-loss checking for this pair
+                    # Let the StateManager handle Stoploss checking for this pair
                     await asyncio.to_thread(
                         self.state_managers[pair].check_stop_loss,
                         current_price, fee_percentage, atr_value, atr_multiplier
