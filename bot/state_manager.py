@@ -278,7 +278,7 @@ class StateManager:
             revenue = current_price * quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
             self.logger.log(
-                f"[{self.bot_name}] ⛔️ Stop loss attempt {attempt} for {self.pair}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
+                f"[{self.bot_name}]⛔️ {self.pair}: Stop loss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
 
@@ -430,3 +430,71 @@ class StateManager:
                 to_console=True
             )
             return None
+
+
+    def buy_dynamic(self, price, quantity, fee_percentage):
+        """
+        Voert een kooporder uit met de dynamisch berekende quantity.
+
+        Args:
+            price (float): De huidige prijs.
+            quantity (float): De berekende hoeveelheid.
+            fee_percentage (float): Het handelskostenpercentage.
+        """
+        try:
+            available_balance = TradingUtils.get_account_balance(
+                self.bitvavo, asset="EUR")
+        except Exception as e:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Error retrieving account balance: {e}",
+                to_console=True,
+                to_slack=True
+            )
+            return
+
+        if available_balance < price * quantity:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Onvoldoende saldo voor {self.pair}. Vereist: {price * quantity:.2f} EUR, beschikbaar: {available_balance:.2f} EUR",
+                to_console=True,
+                to_slack=True
+            )
+            return
+
+        # Pas de quantity aan conform de markteisen
+        quantity = self.adjust_quantity(self.pair, quantity)
+        if quantity <= 0:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Ongeldige quantity voor {self.pair}: {quantity}",
+                to_console=True,
+                to_slack=True
+            )
+            return
+
+        order = TradingUtils.place_order(
+            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
+
+        if order.get("status") == "demo" or "orderId" in order:
+            new_position = {
+                "price": price,
+                "quantity": quantity,
+                "spent": price * quantity,
+                "timestamp": datetime.now().isoformat()
+            }
+            if self.pair not in self.portfolio:
+                self.portfolio[self.pair] = []
+            elif not isinstance(self.portfolio[self.pair], list):
+                self.portfolio[self.pair] = [self.portfolio[self.pair]]
+            self.portfolio[self.pair].append(new_position)
+            self.save_portfolio()
+            self.log_trade("buy", price, quantity)
+            self.logger.log(
+                f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
+                to_console=True,
+                to_slack=True
+            )
+        else:
+            self.logger.log(
+                f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}",
+                to_console=True,
+                to_slack=True
+            )
