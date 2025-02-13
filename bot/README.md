@@ -165,3 +165,70 @@ python bot/scalping_bot.py --config config/top_5_crypto_config.json
 
 ---
 **Note:** Use this bot responsibly and only trade with funds you can afford to lose. Cryptocurrency trading involves significant risk.
+
+
+# Crypto Scalping Bot
+
+The Crypto Scalping Bot is an asynchronous trading system designed for dynamic crypto scalping using the Bitvavo API. The bot integrates technical indicators (RSI, EMA, ATR) with dynamic stop-loss and portfolio rebalancing strategies. It supports multiple trading profiles, each tailored for different timeframes: day trading, week trading, and month trading.
+
+## Profiles
+
+The bot uses JSON configuration files to define its behavior. Three sample profiles are provided:
+
+- **day_trader.json** – Designed for short-term, high-frequency trading.
+- **week_trader.json** – Configured for trades that are held over several days.
+- **month_trader.json** – Tuned for longer-term positions held over weeks or months.
+
+Each profile has a total budget of 10,000 EUR and distinct settings that affect the sensitivity of indicators, risk management, and portfolio rebalancing.
+
+## Configuration Parameters
+
+Below is a description of each parameter used in the configuration files:
+
+- **PROFILE**  
+  *Description:* The name of the trading profile. Used for logging and identifying the bot's operating mode.  
+  *Example:* `"DAY_TRADER"`, `"WEEK_TRADER"`, `"MONTH_TRADER"`
+
+- **TOTAL_BUDGET**  
+  *Description:* The total amount of capital available for trading.  
+  *Example:* `10000.0` (EUR)
+
+- **PAIRS**  
+  *Description:* A list of trading pairs that the bot will monitor and trade.  
+  *Example:* `["BTC-EUR", "ETH-EUR", "SHIB-EUR"]`
+
+- **TRADE_FEE_PERCENTAGE**  
+  *Description:* The percentage fee charged on each trade (both buy and sell orders).  
+  *Example:* `0.33`
+
+- **CHECK_INTERVAL**  
+  *Description:* The time interval (in seconds) between each cycle of the bot’s main loop. Shorter intervals are typical for day trading.  
+  *Example:* `5` for day trading, `10` for week trading, `20` for month trading.
+
+- **RSI_POINTS**  
+  *Description:* The number of data points used to calculate the Relative Strength Index (RSI). A lower value produces a more responsive indicator.  
+  *Example:* `14` for day trading, `20` for week trading, `30` for month trading.
+
+- **RSI_INTERVAL**  
+  *Description:* The time interval for each RSI candle. This affects the responsiveness of the RSI indicator.  
+  *Example:* `"1m"` (1 minute) for day trading, `"5m"` (5 minutes) for week trading, `"1h"` (1 hour) for month trading.
+
+- **RSI_BUY_THRESHOLD**  
+  *Description:* The RSI value below which the bot considers a buying opportunity.  
+  *Example:* `30` for day trading, `35` for week trading, `40` for month trading.
+
+- **RSI_SELL_THRESHOLD**  
+  *Description:* The RSI value above which the bot considers a selling opportunity.  
+  *Example:* `70` for day trading, `65` for week trading, `60` for month trading.
+
+- **EMA_PROFILES**  
+  *Description:* A dictionary defining window sizes for various Exponential Moving Average (EMA) profiles.  
+  *Example:*  
+
+  ```json
+  {
+    "ULTRASHORT": 9,
+    "SHORT": 21,
+    "MEDIUM": 50,
+    "LONG": 200
+  }
