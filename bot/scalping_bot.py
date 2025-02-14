@@ -55,6 +55,10 @@ class ScalpingBot:
             config.get("EMA_PROFILE", "MEDIUM"), 50)
         self.ema_history = {pair: [] for pair in config["PAIRS"]}
 
+        # RSI en EMA instellingen
+        self.ema_buy_threshold = config.get("EMA_BUY_THRESHOLD", 0.995)
+        self.ema_sell_threshold = config.get("EMA_SELL_THRESHOLD", 1.005)
+
         # Load historical prices for each pair (for RSI and EMA)
         for pair in config["PAIRS"]:
             try:
@@ -177,8 +181,8 @@ class ScalpingBot:
 
                     # Buy logic with dynamic risk allocation
                     if rsi is not None and ema is not None:
-                        # Sell if RSI is above threshold and price is below EMA
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and current_price < ema:
+                        # Sell if RSI is above threshold and price is below EMA * EMA_SELL_THRESHOLD
+                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and current_price < ema * self.ema_sell_threshold:
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
@@ -186,7 +190,7 @@ class ScalpingBot:
                                     )
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Selling {pair}: Calculated profit {profit_percentage:.2f}%",
+                                            f"🔴 Selling {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema:.2f}, Threshold={self.ema_sell_threshold}, Profit={profit_percentage:.2f}%",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -195,15 +199,14 @@ class ScalpingBot:
                                             current_price,
                                             fee_percentage
                                         )
-                        # Buy when RSI is below threshold and price is above EMA
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and current_price > ema:
-                            max_trades = self.config.get(
-                                "MAX_TRADES_PER_PAIR", 1)
+
+                        # Buy when RSI is below threshold and price is above EMA * EMA_BUY_THRESHOLD
+                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and current_price > ema * self.ema_buy_threshold:
+                            max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
                                 # Calculate the remaining budget for this pair.
                                 allocated_budget = self.pair_budgets[pair]
-                                total_spent = sum(pos.get("spent", 0)
-                                                  for pos in open_positions)
+                                total_spent = sum(pos.get("spent", 0) for pos in open_positions)
                                 remaining_budget = allocated_budget - total_spent
 
                                 if remaining_budget > 0:
@@ -220,18 +223,16 @@ class ScalpingBot:
                                         atr_value = None
 
                                     if atr_value is not None:
-                                        total_budget = self.config.get(
-                                            "TOTAL_BUDGET", 10000.0)
+                                        total_budget = self.config.get("TOTAL_BUDGET", 10000.0)
                                         risk_amount = total_budget * risk_percentage
                                         risk_per_unit = atr_multiplier * atr_value
                                         dynamic_quantity = risk_amount / risk_per_unit
 
                                         max_quantity = remaining_budget / current_price
-                                        final_quantity = min(
-                                            dynamic_quantity, max_quantity)
+                                        final_quantity = min(dynamic_quantity, max_quantity)
 
                                         self.log_message(
-                                            f"🟢 Buying {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, "
+                                            f"🟢 Buying {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema:.2f}, Threshold={self.ema_buy_threshold}, "
                                             f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
                                             to_slack=True
                                         )
