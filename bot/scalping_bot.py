@@ -179,6 +179,7 @@ class ScalpingBot:
                         current_price, fee_percentage, atr_value, atr_multiplier
                     )
 
+
                     # Buy logic with dynamic risk allocation
                     if rsi is not None and ema is not None:
                         # Sell if RSI is above threshold and price is below EMA * EMA_SELL_THRESHOLD
@@ -199,6 +200,12 @@ class ScalpingBot:
                                             current_price,
                                             fee_percentage
                                         )
+                                        # ✅ Update het budget na verkoop
+                                        revenue = current_price * \
+                                            pos["quantity"] * (1 - fee_percentage / 100)
+                                        self.pair_budgets[pair] += revenue
+                                        self.log_message(
+                                            f"📊 Updated budget for {pair}: {self.pair_budgets[pair]:.2f} EUR")
 
                         # Buy when RSI is below threshold and price is above EMA * EMA_BUY_THRESHOLD
                         elif rsi <= self.config["RSI_BUY_THRESHOLD"] and current_price > ema * self.ema_buy_threshold:
@@ -209,7 +216,8 @@ class ScalpingBot:
                                 total_spent = sum(pos.get("spent", 0) for pos in open_positions)
                                 remaining_budget = allocated_budget - total_spent
 
-                                if remaining_budget > 0:
+                                # ✅ Extra check om te voorkomen dat de bot koopt met negatief budget
+                                if remaining_budget > 0 and self.pair_budgets[pair] >= 0:
                                     try:
                                         candle_data = await asyncio.to_thread(
                                             TradingUtils.fetch_historical_candles, self.bitvavo, pair,
@@ -244,9 +252,7 @@ class ScalpingBot:
                                         )
                                     else:
                                         self.log_message(
-                                            f"❌ Cannot calculate ATR for {pair}. Skipping buy.",
-                                            to_slack=True
-                                        )
+                                            f"❌ Cannot calculate ATR for {pair}. Skipping buy.", to_slack=True)
                                 else:
                                     self.log_message(
                                         f"🤚 Not enough budget remaining for {pair}. Remaining: {remaining_budget:.2f} EUR",
@@ -257,6 +263,9 @@ class ScalpingBot:
                                     f"🤚 Skipping buy for {pair} (open trades: {len(open_positions)}) – max trades reached.",
                                     to_slack=True
                                 )
+
+
+
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
             self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
