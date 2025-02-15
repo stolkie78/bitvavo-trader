@@ -344,16 +344,19 @@ class StateManager:
             self.logger.log(
                 f"[{self.bot_name}] 👽❌ Error logging trade: {e}", to_console=True)
 
+
     def get_actual_trade_profit(self, order_id, position, fee_percentage):
         """
         Retrieve actual order details and calculate true profit.
         """
         try:
+            # Voeg self.pair toe als market argument
             order_details = TradingUtils.get_order_details(
-                self.bitvavo, order_id)
+                self.bitvavo, self.pair, order_id)
+    
             total_executed_value = 0.0
             total_fee = 0.0
-
+    
             for trade in order_details.get("trades", []):
                 trade_price = float(trade.get("price", 0))
                 trade_quantity = float(trade.get("quantity", 0))
@@ -364,7 +367,7 @@ class StateManager:
                     fee = trade_price * trade_quantity * (fee_percentage / 100)
                 total_executed_value += trade_price * trade_quantity
                 total_fee += fee
-
+    
             cost_basis = position.get(
                 "spent", position["price"] * position["quantity"])
             actual_profit = total_executed_value - cost_basis - total_fee
@@ -375,6 +378,9 @@ class StateManager:
                 to_console=True
             )
             return None
+
+
+
 
     def buy_dynamic(self, price, quantity, fee_percentage):
         """
