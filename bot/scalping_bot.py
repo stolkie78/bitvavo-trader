@@ -256,12 +256,12 @@ class ScalpingBot:
                                 else:
                                     self.log_message(
                                         f"🤚 Not enough budget remaining for {pair}. Remaining: {remaining_budget:.2f} EUR",
-                                        to_slack=True
+                                        to_slack=False
                                     )
                             else:
                                 self.log_message(
                                     f"🤚 Skipping buy for {pair} (open trades: {len(open_positions)}) – max trades reached.",
-                                    to_slack=True
+                                    to_slack=False
                                 )
 
 

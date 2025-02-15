@@ -105,12 +105,12 @@ class TradingUtils:
                         f"Error fetching account balance for {asset}: {e}") from e
                 time.sleep(delay)
 
+
     @staticmethod
     def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
         """
         Places a buy or sell order via the Bitvavo API or simulates it in demo mode,
         with retry options for temporary errors.
-        
         :param bitvavo: Configured Bitvavo API client.
         :param market: Trading pair, e.g. "BTC-EUR".
         :param side: "buy" or "sell".
@@ -132,22 +132,53 @@ class TradingUtils:
             }
             logging.debug("Simulated order: %s", simulated_order)
             return simulated_order
-
+        # ✅ 1. Haal balans op voor de base asset van de markt (bijv. DOGE voor DOGE-EUR)
+        balance_data = bitvavo.balance()
+        base_asset = market.split("-")[0]  # "DOGE" uit "DOGE-EUR"
+        available_balance = next((float(
+            item["available"]) for item in balance_data if item["symbol"] == base_asset), None)
+        logging.info("💰 Available balance for %s: %s",
+                     base_asset, available_balance)
+        if available_balance is not None and available_balance < amount:
+            logging.warning("⚠️ Insufficient balance for %s: Need %s, have %s",
+                            base_asset, amount, available_balance)
+            return {"error": "Insufficient balance"}
+        # ✅ 2. Haal marktinformatie op om de minimale ordergrootte te checken
+        market_info = bitvavo.markets()
+        min_order_size = None
+        for market_item in market_info:
+            if market_item["market"] == market:
+                min_order_size = float(market_item.get("minOrderInBaseAsset", 0))
+        logging.info("📏 Minimum order size for %s: %s", market, min_order_size)
+        if min_order_size and amount < min_order_size:
+            logging.warning(
+                "🚨 Order amount %s is below the minimum %s", amount, min_order_size)
+            return {"error": "Order amount too small"}
+        # ✅ 3. Probeer de order te plaatsen met retry-logica
         for attempt in range(1, retries + 1):
             try:
                 order = bitvavo.placeOrder(
                     market, side, "market", {"amount": amount})
                 if isinstance(order, dict) and order.get("error"):
                     raise ValueError(f"API error: {order.get('error')}")
-                logging.debug("Placed order for %s: %s", market, order)
+                logging.debug("✅ Placed order for %s: %s", market, order)
                 return order
             except Exception as e:
                 logging.warning(
-                    "Attempt %d to place order on %s failed: %s", attempt, market, e)
+                    "❌ Attempt %d to place order on %s failed: %s", attempt, market, e)
+                # Extra balans-check als API een "insufficient balance" error geeft
+                if "insufficient balance" in str(e).lower():
+                    balance_data = bitvavo.balance()
+                    logging.warning(
+                        "🔍 Balance details at failure: %s", balance_data)
                 if attempt == retries:
                     raise RuntimeError(
                         f"Error placing {side} order for {market}: {e}") from e
                 time.sleep(delay)
+
+
+
+
 
     @staticmethod
     def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
@@ -177,6 +208,16 @@ class TradingUtils:
                 else:
                     raise ValueError(
                         f"Unexpected response format: {order_details}")
+
+            except Exception as e:
+                logging.warning(
+                    "Attempt %d to fetch order details for %s failed: %s", attempt, order_id, e)
+                if attempt == retries:
+                    raise RuntimeError(
+                        f"Error retrieving order details for {order_id}: {e}") from e
+                time.sleep(delay)
+
+
 
             except Exception as e:
                 logging.warning(
