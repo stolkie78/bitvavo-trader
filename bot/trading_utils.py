@@ -125,9 +125,9 @@ class TradingUtils:
 
         for attempt in range(1, retries + 1):
             try:
-                # ✅ Check correcte balans voor de juiste asset
-                base_asset, quote_asset = market.split(
-                    "-")  # TRUMP-EUR -> ["TRUMP", "EUR"]
+                # ✅ Haal base en quote asset op (DOGE-EUR -> ["DOGE", "EUR"])
+                base_asset, quote_asset = market.split("-")
+                # EUR voor buy, DOGE voor sell
                 asset_to_check = quote_asset if side == "buy" else base_asset
 
                 available_balance = TradingUtils.get_account_balance(
@@ -135,18 +135,25 @@ class TradingUtils:
 
                 logging.debug(
                     f"💰 Available balance for {asset_to_check}: {available_balance:.8f}")
-                required_amount = amount * \
-                    (1.01 if side == "buy" else 1)  # kleine marge
 
-                if available_balance < required_amount:
+                # ✅ Controleer of risk_per_unit correct is berekend (mag niet 0 zijn)
+                if amount <= 0:
                     logging.warning(
-                        f"⚠️ Insufficient balance for {asset_to_check}: Need {required_amount:.8f}, have {available_balance:.8f}"
+                        f"⚠️ Invalid order amount for {market}: {amount:.8f}")
+                    return {"error": "Invalid order amount"}
+
+                # ✅ Rounding van het order-amount naar de juiste decimalen
+                # Afhankelijk van Bitvavo's marktspecificaties
+                amount = round(amount, 6)
+
+                # ✅ Controleer of er genoeg balans is voor aankoop
+                if available_balance < (amount if side == "buy" else amount * TradingUtils.fetch_current_price(bitvavo, market)):
+                    logging.warning(
+                        f"⚠️ Insufficient balance for {market}: Need {amount:.8f}, have {available_balance:.8f}"
                     )
                     return {"error": "Insufficient balance"}
 
-                # ✅ Aantal decimalen beperken tot de juiste precisie
-                amount = round(amount, 6)  # Afhankelijk van wat Bitvavo accepteert
-
+                # ✅ Plaats order
                 order = bitvavo.placeOrder(
                     market, side, "market", {"amount": amount}
                 )
@@ -161,7 +168,7 @@ class TradingUtils:
                     f"Attempt {attempt} to place order on {market} failed: {e}"
                 )
 
-                # Extra balans-check als API een "insufficient balance" error geeft
+                # Extra debug-logging bij insufficient balance error
                 if "insufficient balance" in str(e).lower():
                     balance_data = bitvavo.balance()
                     logging.warning("🔍 Balance details: %s", balance_data)
