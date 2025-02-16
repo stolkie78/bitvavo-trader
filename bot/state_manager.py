@@ -246,51 +246,51 @@ class StateManager:
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
         """
         Execute a Stoploss sell order for a specific position with a retry mechanism.
+        If the available balance is lower than the position size, it adjusts the sell amount accordingly.
         """
         position_quantity = position.get("quantity", 0)
         position_quantity = self.adjust_quantity(position_quantity)
-
+    
         if position_quantity <= 0:
             self.logger.log(
                 f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during Stoploss sell: {position_quantity}",
                 to_console=True, to_slack=True
             )
             return False
-
-        # Haal de daadwerkelijke beschikbare balans op
-        # Haal base asset op (bijv. "LTC" uit "LTC-EUR")
+    
+        # **Haal het daadwerkelijk beschikbare saldo op**
         base_asset = self.pair.split("-")[0]
         actual_balance = TradingUtils.get_account_balance(
             self.bitvavo, asset=base_asset)
-
-        # **🚀 Belangrijk: Pas de verkoophoeveelheid aan als er minder saldo is dan de positie**
+    
+        # **Verkoop alleen wat beschikbaar is**
         sell_quantity = min(position_quantity, actual_balance)
-
+    
         if sell_quantity <= 0:
             self.logger.log(
                 f"[{self.bot_name}] ❌ Cannot sell {self.pair}, zero balance available.",
                 to_console=True, to_slack=True
             )
             return False
-
+    
         cost_basis = position.get("spent", position["price"] * sell_quantity)
-
+    
         for attempt in range(1, max_retries + 1):
             revenue = current_price * sell_quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
-
+    
             self.logger.log(
                 f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell {sell_quantity:.6f} at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
-
+    
             order = TradingUtils.place_order(
                 self.bitvavo, self.pair, "sell", sell_quantity, demo_mode=self.demo_mode
             )
-
+    
             if order.get("status") == "demo" or "orderId" in order:
                 executed_quantity = order.get("filledAmount", sell_quantity)
-
+    
                 # **🚀 Controleer of de order slechts gedeeltelijk is uitgevoerd**
                 if executed_quantity < sell_quantity:
                     self.logger.log(
@@ -298,9 +298,9 @@ class StateManager:
                         to_console=True
                     )
                     sell_quantity = executed_quantity  # Pas aan naar wat daadwerkelijk verkocht is
-
+    
                 self.log_trade("sell", current_price, sell_quantity, profit)
-
+    
                 # **✅ Update de portfolio correct**
                 if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                     try:
@@ -317,7 +317,7 @@ class StateManager:
                             f"[{self.bot_name}] ❌ Position not found in portfolio for {self.pair}.",
                             to_console=True
                         )
-
+    
                 self.save_portfolio()
                 self.logger.log(
                     f"[{self.bot_name}] ✅ Stoploss sold {self.pair}: Price={current_price:.2f}, Quantity={sell_quantity:.6f}, Profit={profit:.2f}",
@@ -330,13 +330,12 @@ class StateManager:
                     to_console=True
                 )
                 time.sleep(wait_time)
-
+    
         self.logger.log(
             f"[{self.bot_name}] ❌ Stoploss sell failed for {self.pair} after {max_retries} attempts.",
             to_console=True
         )
         return False
-
 
 
     def calculate_profit(self, current_price, fee_percentage):

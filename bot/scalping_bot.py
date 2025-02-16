@@ -18,7 +18,7 @@ class ScalpingBot:
     """
     Async Scalping Bot with dynamic stoploss and risk allocation.
     """
-    VERSION = "0.4.9"
+    VERSION = "0.4.10"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
