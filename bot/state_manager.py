@@ -247,77 +247,80 @@ class StateManager:
         """
         Execute a Stoploss sell order for a specific position with a retry mechanism.
         """
-        quantity = position.get("quantity", 0)
-        quantity = self.adjust_quantity(quantity)
-    
-        if quantity <= 0:
+        position_quantity = position.get("quantity", 0)
+        position_quantity = self.adjust_quantity(position_quantity)
+
+        if position_quantity <= 0:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during Stoploss sell: {quantity}",
+                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during Stoploss sell: {position_quantity}",
                 to_console=True, to_slack=True
             )
             return False
-    
+
         # Haal de daadwerkelijke beschikbare balans op
         # Haal base asset op (bijv. "LTC" uit "LTC-EUR")
         base_asset = self.pair.split("-")[0]
         actual_balance = TradingUtils.get_account_balance(
             self.bitvavo, asset=base_asset)
-    
-        # Pas de verkoophoeveelheid aan als deze groter is dan de beschikbare balans
-        if quantity > actual_balance:
-            self.logger.log(
-                f"[{self.bot_name}] ⚠️ Adjusting sell quantity for {self.pair}: Trying {quantity:.8f}, but only {actual_balance:.8f} available.",
-                to_console=True
-            )
-            quantity = actual_balance
-    
-        if quantity <= 0:
+
+        # **🚀 Belangrijk: Pas de verkoophoeveelheid aan als er minder saldo is dan de positie**
+        sell_quantity = min(position_quantity, actual_balance)
+
+        if sell_quantity <= 0:
             self.logger.log(
                 f"[{self.bot_name}] ❌ Cannot sell {self.pair}, zero balance available.",
                 to_console=True, to_slack=True
             )
             return False
-    
-        cost_basis = position.get("spent", position["price"] * quantity)
-    
+
+        cost_basis = position.get("spent", position["price"] * sell_quantity)
+
         for attempt in range(1, max_retries + 1):
-            revenue = current_price * quantity * (1 - fee_percentage / 100)
+            revenue = current_price * sell_quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
-    
+
             self.logger.log(
-                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell {quantity:.6f} at {current_price:.2f} (Profit: {profit:.2f})",
+                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell {sell_quantity:.6f} at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
-    
+
             order = TradingUtils.place_order(
-                self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
+                self.bitvavo, self.pair, "sell", sell_quantity, demo_mode=self.demo_mode
             )
-    
+
             if order.get("status") == "demo" or "orderId" in order:
-                executed_quantity = order.get("filledAmount", quantity)
-    
-                # Controleer of de order slechts gedeeltelijk is uitgevoerd
-                if executed_quantity < quantity:
+                executed_quantity = order.get("filledAmount", sell_quantity)
+
+                # **🚀 Controleer of de order slechts gedeeltelijk is uitgevoerd**
+                if executed_quantity < sell_quantity:
                     self.logger.log(
-                        f"[{self.bot_name}] ⚠️ Partial sell detected for {self.pair}: Expected {quantity}, executed {executed_quantity}.",
+                        f"[{self.bot_name}] ⚠️ Partial sell detected for {self.pair}: Expected {sell_quantity}, executed {executed_quantity}.",
                         to_console=True
                     )
-                    quantity = executed_quantity
-    
-                self.log_trade("sell", current_price, quantity, profit)
-    
+                    sell_quantity = executed_quantity  # Pas aan naar wat daadwerkelijk verkocht is
+
+                self.log_trade("sell", current_price, sell_quantity, profit)
+
+                # **✅ Update de portfolio correct**
                 if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                     try:
-                        self.portfolio[self.pair].remove(position)
+                        for pos in self.portfolio[self.pair]:
+                            if pos["quantity"] == position["quantity"]:  # Zoek de juiste positie
+                                # Verminder alleen de verkochte hoeveelheid
+                                pos["quantity"] -= sell_quantity
+                                if pos["quantity"] <= 0:
+                                    # Verwijder als alles verkocht is
+                                    self.portfolio[self.pair].remove(pos)
+                                break
                     except ValueError:
                         self.logger.log(
                             f"[{self.bot_name}] ❌ Position not found in portfolio for {self.pair}.",
                             to_console=True
                         )
-    
+
                 self.save_portfolio()
                 self.logger.log(
-                    f"[{self.bot_name}] ✅ Stoploss sold {self.pair}: Price={current_price:.2f}, Quantity={quantity:.6f}, Profit={profit:.2f}",
+                    f"[{self.bot_name}] ✅ Stoploss sold {self.pair}: Price={current_price:.2f}, Quantity={sell_quantity:.6f}, Profit={profit:.2f}",
                     to_console=True, to_slack=False
                 )
                 return True
@@ -327,7 +330,7 @@ class StateManager:
                     to_console=True
                 )
                 time.sleep(wait_time)
-    
+
         self.logger.log(
             f"[{self.bot_name}] ❌ Stoploss sell failed for {self.pair} after {max_retries} attempts.",
             to_console=True
@@ -433,10 +436,9 @@ class StateManager:
             return None
 
 
-    def buy_dynamic(self, price, quantity, fee_percentage):
+    def buy_dynamic(self, price, quantity, fee_percentage, pair_budgets):
         """
-        Execute a buy order with the dynamically calculated quantity,
-        ensuring it stays within the allocated budget for this pair.
+        Execute a buy order with the dynamically calculated quantity, ensuring it fits within budget.
         """
         try:
             available_balance = TradingUtils.get_account_balance(
@@ -448,24 +450,27 @@ class StateManager:
                 to_slack=True
             )
             return
-
-        # ✅ Bereken wat er nog over is binnen het budget voor dit pair
-        allocated_budget = self.pair_budgets.get(self.pair, 0)
-        total_spent = sum(pos.get("spent", 0) for pos in self.get_open_positions())
-        remaining_budget = allocated_budget - total_spent
-
-        # ✅ Check of er genoeg budget is om de aankoop te doen
-        required_funds = price * quantity
-        if required_funds > remaining_budget or required_funds > available_balance:
+    
+        # ✅ Haal het toegekende budget op voor deze trading pair
+        allocated_budget = pair_budgets.get(self.pair, 0)
+        if allocated_budget <= 0:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Insufficient budget for {self.pair}. Required: {required_funds:.2f} EUR, "
-                f"Available in pair budget: {remaining_budget:.2f} EUR, Available in account: {available_balance:.2f} EUR",
+                f"[{self.bot_name}] ❌ No budget allocated for {self.pair}.",
                 to_console=True,
                 to_slack=True
             )
             return
-
-        # ✅ Ronde het aantal af naar de juiste decimalen
+    
+        # ✅ Controleer of er genoeg budget is voor de aankoop
+        cost = price * quantity
+        if cost > allocated_budget:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Not enough budget for {self.pair}. Needed: {cost:.2f}, Available: {allocated_budget:.2f}",
+                to_console=True,
+                to_slack=True
+            )
+            return
+    
         quantity = self.adjust_quantity(quantity)
         if quantity <= 0:
             self.logger.log(
@@ -474,37 +479,34 @@ class StateManager:
                 to_slack=True
             )
             return
-
-        # ✅ Plaats de order via de API
+    
         order = TradingUtils.place_order(
             self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
-
+    
         if order.get("status") == "demo" or "orderId" in order:
             new_position = {
                 "price": price,
                 "quantity": quantity,
-                "spent": required_funds,
+                "spent": cost,
                 "timestamp": datetime.now().isoformat()
             }
             if self.pair not in self.portfolio:
                 self.portfolio[self.pair] = []
             elif not isinstance(self.portfolio[self.pair], list):
                 self.portfolio[self.pair] = [self.portfolio[self.pair]]
-
             self.portfolio[self.pair].append(new_position)
-            # ✅ Update budget na aankoop
-            self.pair_budgets[self.pair] -= required_funds
             self.save_portfolio()
             self.log_trade("buy", price, quantity)
-
             self.logger.log(
-                f"[{self.bot_name}] 🟢 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
+                f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
                 to_console=True,
                 to_slack=True
             )
+            # ✅ Trek het bestede bedrag af van het budget
+            pair_budgets[self.pair] -= cost
         else:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Failed to execute buy order for {self.pair}: {order}",
+                f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}",
                 to_console=True,
                 to_slack=True
             )
