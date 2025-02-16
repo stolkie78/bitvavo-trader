@@ -179,6 +179,7 @@ class StateManager:
         for position in list(open_positions):
             self.sell_position(position, price, fee_percentage)
 
+
     def sell_position(self, position, price, fee_percentage):
         """
         Execute a sell order for a specific position and remove it from the portfolio.
@@ -186,23 +187,29 @@ class StateManager:
         open_positions = self.get_open_positions()
         if position not in open_positions:
             self.logger.log(
-                f"[{self.bot_name}] 👽 No matching position to sell for {self.pair}.", to_console=True)
+                f"[{self.bot_name}] ❌ No matching position to sell for {self.pair}.",
+                to_console=True
+            )
             return
 
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(quantity)
         if quantity <= 0:
             self.logger.log(
-                f"[{self.bot_name}] 👽 Invalid quantity for {self.pair}: {quantity}", to_console=True, to_slack=True)
+                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair}: {quantity}",
+                to_console=True,
+                to_slack=True
+            )
             return
 
+        # ✅ Bereken de winst/verlies
         cost_basis = position.get("spent", position["price"] * quantity)
         revenue = price * quantity * (1 - fee_percentage / 100)
         estimated_profit = revenue - cost_basis
 
+        # ✅ Plaats verkooporder
         order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
-        )
+            self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode)
 
         if order.get("status") == "demo" or "orderId" in order:
             order_id = order.get("orderId")
@@ -212,6 +219,7 @@ class StateManager:
                     order_id, position, fee_percentage)
             profit_to_log = actual_profit if actual_profit is not None else estimated_profit
 
+            # ✅ Log en update portfolio
             self.log_trade("sell", price, quantity, profit=profit_to_log)
             if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                 try:
@@ -222,14 +230,16 @@ class StateManager:
                         to_console=True
                     )
             self.save_portfolio()
+            self.pair_budgets[self.pair] += revenue  # ✅ Update budget na verkoop
             self.logger.log(
-                f"[{self.bot_name}] 👽 Sold {self.pair}: Price={price:.2f}, Profit={profit_to_log:.2f}",
+                f"[{self.bot_name}] 🔴 Sold {self.pair}: Price={price:.2f}, Profit={profit_to_log:.2f}",
                 to_console=True, to_slack=False
             )
         else:
             self.logger.log(
                 f"[{self.bot_name}] ❌ Failed to execute sell order for {self.pair}: {order}",
-                to_console=True, to_slack=True
+                to_console=True,
+                to_slack=True
             )
 
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
@@ -380,11 +390,10 @@ class StateManager:
             return None
 
 
-
-
     def buy_dynamic(self, price, quantity, fee_percentage):
         """
-        Execute a buy order with the dynamically calculated quantity.
+        Execute a buy order with the dynamically calculated quantity,
+        ensuring it stays within the allocated budget for this pair.
         """
         try:
             available_balance = TradingUtils.get_account_balance(
@@ -397,14 +406,23 @@ class StateManager:
             )
             return
 
-        if available_balance < price * quantity:
+        # ✅ Bereken wat er nog over is binnen het budget voor dit pair
+        allocated_budget = self.pair_budgets.get(self.pair, 0)
+        total_spent = sum(pos.get("spent", 0) for pos in self.get_open_positions())
+        remaining_budget = allocated_budget - total_spent
+
+        # ✅ Check of er genoeg budget is om de aankoop te doen
+        required_funds = price * quantity
+        if required_funds > remaining_budget or required_funds > available_balance:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Insufficient balance for {self.pair}. Required: {price * quantity:.2f} EUR, available: {available_balance:.2f} EUR",
+                f"[{self.bot_name}] ❌ Insufficient budget for {self.pair}. Required: {required_funds:.2f} EUR, "
+                f"Available in pair budget: {remaining_budget:.2f} EUR, Available in account: {available_balance:.2f} EUR",
                 to_console=True,
                 to_slack=True
             )
             return
 
+        # ✅ Ronde het aantal af naar de juiste decimalen
         quantity = self.adjust_quantity(quantity)
         if quantity <= 0:
             self.logger.log(
@@ -414,6 +432,7 @@ class StateManager:
             )
             return
 
+        # ✅ Plaats de order via de API
         order = TradingUtils.place_order(
             self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
 
@@ -421,24 +440,28 @@ class StateManager:
             new_position = {
                 "price": price,
                 "quantity": quantity,
-                "spent": price * quantity,
+                "spent": required_funds,
                 "timestamp": datetime.now().isoformat()
             }
             if self.pair not in self.portfolio:
                 self.portfolio[self.pair] = []
             elif not isinstance(self.portfolio[self.pair], list):
                 self.portfolio[self.pair] = [self.portfolio[self.pair]]
+
             self.portfolio[self.pair].append(new_position)
+            # ✅ Update budget na aankoop
+            self.pair_budgets[self.pair] -= required_funds
             self.save_portfolio()
             self.log_trade("buy", price, quantity)
+
             self.logger.log(
-                f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
+                f"[{self.bot_name}] 🟢 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
                 to_console=True,
                 to_slack=True
             )
         else:
             self.logger.log(
-                f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}",
+                f"[{self.bot_name}] ❌ Failed to execute buy order for {self.pair}: {order}",
                 to_console=True,
                 to_slack=True
             )

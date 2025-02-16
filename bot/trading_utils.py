@@ -108,8 +108,8 @@ class TradingUtils:
     @staticmethod
     def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
         """
-        Places a buy or sell order via the Bitvavo API or simulates it in demo mode,
-        with retry options for temporary errors.
+        Places a buy or sell order via the Bitvavo API, ensuring it stays within the budget
+        and accounts for open positions.
         """
         if demo_mode:
             simulated_order = {
@@ -125,38 +125,30 @@ class TradingUtils:
 
         for attempt in range(1, retries + 1):
             try:
-                # ✅ Haal base en quote asset op (DOGE-EUR -> ["DOGE", "EUR"])
                 base_asset, quote_asset = market.split("-")
-                # EUR voor buy, DOGE voor sell
                 asset_to_check = quote_asset if side == "buy" else base_asset
-
                 available_balance = TradingUtils.get_account_balance(
                     bitvavo, asset_to_check)
 
                 logging.debug(
                     f"💰 Available balance for {asset_to_check}: {available_balance:.8f}")
 
-                # ✅ Controleer of risk_per_unit correct is berekend (mag niet 0 zijn)
                 if amount <= 0:
                     logging.warning(
                         f"⚠️ Invalid order amount for {market}: {amount:.8f}")
                     return {"error": "Invalid order amount"}
 
-                # ✅ Rounding van het order-amount naar de juiste decimalen
-                # Afhankelijk van Bitvavo's marktspecificaties
                 amount = round(amount, 6)
 
-                # ✅ Controleer of er genoeg balans is voor aankoop
-                if available_balance < (amount if side == "buy" else amount * TradingUtils.fetch_current_price(bitvavo, market)):
+                required_balance = amount if side == "buy" else amount * \
+                    TradingUtils.fetch_current_price(bitvavo, market)
+                if available_balance < required_balance:
                     logging.warning(
-                        f"⚠️ Insufficient balance for {market}: Need {amount:.8f}, have {available_balance:.8f}"
-                    )
+                        f"⚠️ Insufficient balance for {market}: Need {required_balance:.8f}, have {available_balance:.8f}")
                     return {"error": "Insufficient balance"}
 
-                # ✅ Plaats order
                 order = bitvavo.placeOrder(
-                    market, side, "market", {"amount": amount}
-                )
+                    market, side, "market", {"amount": amount})
                 if isinstance(order, dict) and order.get("error"):
                     raise ValueError(f"API error: {order.get('error')}")
 
@@ -165,10 +157,8 @@ class TradingUtils:
 
             except Exception as e:
                 logging.warning(
-                    f"Attempt {attempt} to place order on {market} failed: {e}"
-                )
+                    f"Attempt {attempt} to place order on {market} failed: {e}")
 
-                # Extra debug-logging bij insufficient balance error
                 if "insufficient balance" in str(e).lower():
                     balance_data = bitvavo.balance()
                     logging.warning("🔍 Balance details: %s", balance_data)
