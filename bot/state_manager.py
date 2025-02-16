@@ -242,33 +242,70 @@ class StateManager:
                 to_slack=True
             )
 
+
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
         """
         Execute a Stoploss sell order for a specific position with a retry mechanism.
         """
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(quantity)
+    
         if quantity <= 0:
             self.logger.log(
                 f"[{self.bot_name}] ❌ Invalid quantity for {self.pair} during Stoploss sell: {quantity}",
                 to_console=True, to_slack=True
             )
             return False
-
+    
+        # Haal de daadwerkelijke beschikbare balans op
+        # Haal base asset op (bijv. "LTC" uit "LTC-EUR")
+        base_asset = self.pair.split("-")[0]
+        actual_balance = TradingUtils.get_account_balance(
+            self.bitvavo, asset=base_asset)
+    
+        # Pas de verkoophoeveelheid aan als deze groter is dan de beschikbare balans
+        if quantity > actual_balance:
+            self.logger.log(
+                f"[{self.bot_name}] ⚠️ Adjusting sell quantity for {self.pair}: Trying {quantity:.8f}, but only {actual_balance:.8f} available.",
+                to_console=True
+            )
+            quantity = actual_balance
+    
+        if quantity <= 0:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Cannot sell {self.pair}, zero balance available.",
+                to_console=True, to_slack=True
+            )
+            return False
+    
         cost_basis = position.get("spent", position["price"] * quantity)
+    
         for attempt in range(1, max_retries + 1):
             revenue = current_price * quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
+    
             self.logger.log(
-                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
+                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell {quantity:.6f} at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
-
+    
             order = TradingUtils.place_order(
                 self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
             )
+    
             if order.get("status") == "demo" or "orderId" in order:
+                executed_quantity = order.get("filledAmount", quantity)
+    
+                # Controleer of de order slechts gedeeltelijk is uitgevoerd
+                if executed_quantity < quantity:
+                    self.logger.log(
+                        f"[{self.bot_name}] ⚠️ Partial sell detected for {self.pair}: Expected {quantity}, executed {executed_quantity}.",
+                        to_console=True
+                    )
+                    quantity = executed_quantity
+    
                 self.log_trade("sell", current_price, quantity, profit)
+    
                 if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                     try:
                         self.portfolio[self.pair].remove(position)
@@ -277,9 +314,10 @@ class StateManager:
                             f"[{self.bot_name}] ❌ Position not found in portfolio for {self.pair}.",
                             to_console=True
                         )
+    
                 self.save_portfolio()
                 self.logger.log(
-                    f"[{self.bot_name}] 👽 Stoploss sold {self.pair}: Price={current_price:.2f}, Profit={profit:.2f}",
+                    f"[{self.bot_name}] ✅ Stoploss sold {self.pair}: Price={current_price:.2f}, Quantity={quantity:.6f}, Profit={profit:.2f}",
                     to_console=True, to_slack=False
                 )
                 return True
@@ -289,9 +327,14 @@ class StateManager:
                     to_console=True
                 )
                 time.sleep(wait_time)
-        self.logger.log(f"[{self.bot_name}] ❌ Stoploss sell failed for {self.pair} after {max_retries} attempts.",
-                        to_console=True)
+    
+        self.logger.log(
+            f"[{self.bot_name}] ❌ Stoploss sell failed for {self.pair} after {max_retries} attempts.",
+            to_console=True
+        )
         return False
+
+
 
     def calculate_profit(self, current_price, fee_percentage):
         """
