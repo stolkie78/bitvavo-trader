@@ -3,21 +3,21 @@ from unittest.mock import MagicMock, patch
 import json
 import os
 from datetime import datetime
-from scalping_bot import ScalpingBot
+from trader import TraderBot
 from config_loader import ConfigLoader
 from state_manager import StateManager
 from trading_utils import TradingUtils
 from logging_facility import LoggingFacility
 from bitvavo_client import bitvavo
 
-class TestScalpingBotWithMocking(unittest.TestCase):
+class TestTraderBotWithMocking(unittest.TestCase):
     
     @classmethod
     def setUpClass(cls):
         """ Set up testomgeving en laad testconfiguratie met gemockte API. """
         cls.config_path = "test_config.json"
         cls.test_config = {
-            "PROFILE": "SCALPINGBOT",
+            "PROFILE": "TRADER",
             "TOTAL_BUDGET": 10000.0,
             "PAIRS": ["BTC-EUR", "ETH-EUR"],
             "TRADE_FEE_PERCENTAGE": 0.1,
@@ -54,11 +54,11 @@ class TestScalpingBotWithMocking(unittest.TestCase):
         }
 
         # Start bot in testmodus
-        cls.bot = ScalpingBot(cls.test_config, cls.logger, cls.state_managers, cls.mock_bitvavo, None)
+        cls.bot = TraderBot(cls.test_config, cls.logger, cls.state_managers, cls.mock_bitvavo, None)
 
     def test_load_config(self):
         """ Test of de configuratie correct wordt geladen. """
-        self.assertEqual(self.bot.config["PROFILE"], "SCALPINGBOT")
+        self.assertEqual(self.bot.config["PROFILE"], "TRADER")
         self.assertIn("BTC-EUR", self.bot.config["PAIRS"])
 
     def test_portfolio_initialization(self):

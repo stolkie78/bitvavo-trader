@@ -14,15 +14,15 @@ from bot.bitvavo_client import bitvavo
 from bot.logging_facility import LoggingFacility
 
 
-class ScalpingBot:
+class TraderBot:
     """
-    Async Scalping Bot met dynamische stoploss en dynamische risicodeling.
+    Async Trader Bot met dynamische stoploss en dynamische risicodeling.
     """
     VERSION = "0.3.1"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
-        Initialisatie van de ScalpingBot.
+        Initialisatie van de TraderBot.
 
         Args:
             config (dict): Configuratieparameters uit de config.json.
@@ -37,7 +37,7 @@ class ScalpingBot:
         self.bitvavo = bitvavo
         self.args = args
 
-        self.bot_name = config.get("PROFILE", "SCALPINGBOT")
+        self.bot_name = config.get("PROFILE", "TRADER")
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
@@ -118,7 +118,7 @@ class ScalpingBot:
         Toon de startup-parameters.
         """
         startup_info = {**self.config}
-        self.log_message("🚀 ScalpingBot wordt gestart.", to_slack=True)
+        self.log_message("🚀 TraderBot wordt gestart.", to_slack=True)
         self.log_message(
             f"⚠️ Startup info:\n{json.dumps(startup_info, indent=2)}", to_slack=True)
 
@@ -295,9 +295,9 @@ class ScalpingBot:
                                 )
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
-            self.log_message("🛑 ScalpingBot gestopt door gebruiker.", to_slack=True)
+            self.log_message("🛑 TraderBot gestopt door gebruiker.", to_slack=True)
         finally:
-            self.log_message("✅ ScalpingBot trading beëindigd.", to_slack=True)
+            self.log_message("✅ TraderBot trading beëindigd.", to_slack=True)
 
 
 
@@ -307,13 +307,13 @@ class ScalpingBot:
             
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Async scalping bot met dynamische stoploss en risicodeling"
+        description="Async Trader bot met dynamische stoploss en risicodeling"
     )
     parser.add_argument(
         "--config",
         type=str,
-        default="scalper.json",
-        help="Pad naar JSON config bestand (default: scalper.json)"
+        default="trader.json",
+        help="Pad naar JSON config bestand (default: trader.json)"
     )
     args = parser.parse_args()
 
@@ -331,12 +331,12 @@ if __name__ == "__main__":
             logger,
             bitvavo_instance,
             demo_mode=config.get("DEMO_MODE", False),
-            bot_name=config.get("PROFILE", "SCALPINGBOT")
+            bot_name=config.get("PROFILE", "TRADER")
         )
         for pair in config["PAIRS"]
     }
 
-    bot = ScalpingBot(config, logger, state_managers, bitvavo_instance, args)
+    bot = TraderBot(config, logger, state_managers, bitvavo_instance, args)
     asyncio.run(bot.run())
 
 def check_stop_loss(self, pair, current_price):
