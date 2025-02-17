@@ -46,16 +46,15 @@ class ScalpingBot:
         self.rsi_points = config.get("RSI_POINTS", 14)
         self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
         self.price_history = {pair: [] for pair in config["PAIRS"]}
-        self.ema_profiles = config.get(
-            "EMA_PROFILES", {"ULTRASHORT": 9, "SHORT": 21, "MEDIUM": 50, "LONG": 200})
-        self.selected_ema = self.ema_profiles.get(
-            config.get("EMA_PROFILE", "MEDIUM"), 50)
+        self.ema_points = config.get("EMA_POINTS", 14)
         self.ema_history = {pair: [] for pair in config["PAIRS"]}
+        self.ema_buy_threshold = self.config.get("EMA_BUY_THRESHOLD", 0.002)
+        self.ema_sell_threshold = self.config.get("EMA_SELL_THRESHOLD", -0.002)
 
         # Haal historische prijzen op voor elke pair (voor RSI en EMA)
         for pair in config["PAIRS"]:
             try:
-                required_candles = max(self.rsi_points, self.selected_ema)
+                required_candles = max(self.rsi_points, self.ema_points)
                 historical_prices = TradingUtils.fetch_historical_prices(
                     self.bitvavo, pair, limit=required_candles, interval=self.rsi_interval
                 )
@@ -133,8 +132,7 @@ class ScalpingBot:
         risk_percentage = self.config.get("RISK_PERCENTAGE", 0.01)
         try:
             while True:
-                self.log_message(
-                    f"🐌 Nieuwe cyclus gestart op {datetime.now()}")
+                self.log_message(f"🐌 Nieuwe cyclus gestart op {datetime.now()}")
                 for pair in self.config["PAIRS"]:
                     # Haal de huidige prijs op
                     current_price = await asyncio.to_thread(
@@ -147,14 +145,14 @@ class ScalpingBot:
                         self.price_history[pair].pop(0)
 
                     self.ema_history[pair].append(current_price)
-                    if len(self.ema_history[pair]) > self.selected_ema:
+                    if len(self.ema_history[pair]) > self.ema_points:
                         self.ema_history[pair].pop(0)
 
                     # Bereken EMA en RSI als er voldoende data is
                     ema = None
-                    if len(self.ema_history[pair]) >= self.selected_ema:
+                    if len(self.ema_history[pair]) >= self.ema_points:
                         ema = await asyncio.to_thread(
-                            TradingUtils.calculate_ema, self.ema_history[pair], self.selected_ema
+                            TradingUtils.calculate_ema, self.ema_history[pair], self.ema_points
                         )
                     rsi = None
                     if len(self.price_history[pair]) >= self.rsi_points:
@@ -162,49 +160,44 @@ class ScalpingBot:
                             TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
                         )
 
-                    # Log prijs, RSI en EMA
-                    if rsi is not None:
-                        price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
+                    # Formatteer de prijs en EMA voor logging
+                    price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
                     if ema is not None:
-                        ema_str = f"{ema:.8f} EUR" if ema < 1 else f"{ema:.2f} EUR"
+                        ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
                         self.log_message(
                             f"💎 {pair}: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}"
                         )
-                    
-                    # Log de huidige holdings voor het pair
-                    open_positions = self.state_managers[pair].get_open_positions()
-                    len_positions = len(open_positions)
-                    self.log_message(
-                        f"📂 {pair}: Open positions: {len_positions}")
 
-                    # Check open posities en dynamische stoploss
-                    open_positions = self.state_managers[pair].get_open_positions(
-                    )
+                    # Verkrijg open posities voor het pair
+                    open_positions = self.state_managers[pair].get_open_positions()
+                    self.log_message(
+                        f"📂 {pair}: Open positions: {len(open_positions)}")
+
+                    # --- (Optioneel) Dynamische stoploss voor open posities ---
                     for position in open_positions:
                         try:
-                            # Haal candle-data op voor ATR-berekening
                             candle_data = await asyncio.to_thread(
                                 TradingUtils.fetch_historical_candles, self.bitvavo, pair,
-                                limit=atr_period + 1, interval=self.rsi_interval
+                                limit=self.config.get("ATR_PERIOD", 14) + 1, interval=self.rsi_interval
                             )
                             atr_value = TradingUtils.calculate_atr(
-                                candle_data, period=atr_period)
+                                candle_data, period=self.config.get("ATR_PERIOD", 14)
+                            )
                         except Exception as e:
                             self.log_message(
                                 f"❌ Fout bij ATR berekening voor {pair}: {e}")
                             atr_value = None
 
-
                         if atr_value is not None:
-                            dynamic_stoploss = position["price"] - (atr_value * atr_multiplier)
-                            # Kies precisie: 8 decimalen voor laag geprijsde assets, anders 2 decimalen
+                            dynamic_stoploss = position["price"] - \
+                                (atr_value * self.config.get("ATR_MULTIPLIER", 1.5))
                             precision = 8 if current_price < 1 else 2
                             self.log_message(
-                                f"〽️ {pair}: Dynamic Stoploss voor: {dynamic_stoploss:.{precision}f} (ATR: {atr_value:.{precision}f})"
+                                f"〽️ {pair}: Dynamic Stoploss: {dynamic_stoploss:.{precision}f} (ATR: {atr_value:.{precision}f})"
                             )
                         else:
-                            dynamic_stoploss = position["price"] * (
-                                1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
+                            dynamic_stoploss = position["price"] * \
+                                (1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
 
                         if current_price <= dynamic_stoploss:
                             self.log_message(
@@ -220,10 +213,16 @@ class ScalpingBot:
                                 self.config.get("STOP_LOSS_WAIT_TIME", 5)
                             )
 
-                    # Kooplogica met dynamische risicodeling
+                    # --- Koop-/verkooplogica met EMA thresholds en dynamische risicodeling ---
                     if rsi is not None and ema is not None:
-                        # Verkoop als RSI boven drempel ligt en prijs onder EMA is
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and current_price < ema:
+                        # Bereken het procentuele verschil tussen huidige prijs en EMA
+                        ema_diff = (current_price - ema) / ema
+                        # Formatteer EMA voor logging
+                        ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
+
+                        # Verkooplogica:
+                        # Als RSI boven drempel ligt en de prijs ligt relatief tot de EMA onder de EMA_SELL_THRESHOLD
+                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.config.get("EMA_SELL_THRESHOLD", -0.002):
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
@@ -231,7 +230,7 @@ class ScalpingBot:
                                     )
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Verkopen {pair}: Berekende winst {profit_percentage:.2f}%",
+                                            f"🔴 Verkopen {pair}: Berekende winst {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -240,33 +239,37 @@ class ScalpingBot:
                                             current_price,
                                             self.config["TRADE_FEE_PERCENTAGE"]
                                         )
-                        # Kooplijn: wanneer RSI onder de koopdrempel ligt en prijs boven EMA ligt
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and current_price > ema:
-                            max_trades = self.config.get(
-                                "MAX_TRADES_PER_PAIR", 1)
+                        # Kooplogica:
+                        # Als RSI onder de koopdrempel ligt en de prijs ligt relatief tot de EMA boven de EMA_BUY_THRESHOLD
+                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.config.get("EMA_BUY_THRESHOLD", 0.002):
+                            max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
-                                # Haal ATR op voor risicoberekening
                                 try:
                                     candle_data = await asyncio.to_thread(
                                         TradingUtils.fetch_historical_candles, self.bitvavo, pair,
-                                        limit=atr_period + 1, interval=self.rsi_interval
+                                        limit=self.config.get("ATR_PERIOD", 14) + 1, interval=self.rsi_interval
                                     )
                                     atr_value = TradingUtils.calculate_atr(
-                                        candle_data, period=atr_period)
+                                        candle_data, period=self.config.get(
+                                            "ATR_PERIOD", 14)
+                                    )
                                 except Exception as e:
                                     self.log_message(
                                         f"❌ Fout bij ATR berekening voor {pair}: {e}")
                                     atr_value = None
 
                                 if atr_value is not None:
-                                    # Bepaal het bedrag dat je wilt riskeren (bijv. 1% van TOTAL_BUDGET)
                                     total_budget = self.config.get(
                                         "TOTAL_BUDGET", 10000.0)
+                                    risk_percentage = self.config.get(
+                                        "RISK_PERCENTAGE", 0.01)
+                                    atr_multiplier = self.config.get(
+                                        "ATR_MULTIPLIER", 1.5)
                                     risk_amount = total_budget * risk_percentage
                                     risk_per_unit = atr_multiplier * atr_value
                                     dynamic_quantity = risk_amount / risk_per_unit
 
-                                    # Zorg dat je niet meer koopt dan het budget per pair toelaat
+                                    # Zorg dat het bedrag binnen het budget voor het pair valt
                                     allocated_budget = self.pair_budgets[pair] / \
                                         max_trades
                                     max_quantity = allocated_budget / current_price
@@ -274,8 +277,8 @@ class ScalpingBot:
                                         dynamic_quantity, max_quantity)
 
                                     self.log_message(
-                                        f"🟢 Koopt {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, "
-                                        f"🟢 Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
+                                        f"🟢 Koopt {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff={ema_diff:.4f} | "
+                                        f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
                                         to_slack=True
                                     )
                                     await asyncio.to_thread(
@@ -291,17 +294,21 @@ class ScalpingBot:
                                     )
                             else:
                                 self.log_message(
-                                    f" {pair}: 🤚 Skipping buy ({len(open_positions)}) max trades is {max_trades} reached.",
+                                    f"{pair}: 🤚 Skipping buy ({len(open_positions)}) - max trades ({max_trades}) bereikt.",
                                     to_slack=True
                                 )
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
-            self.log_message(
-                "🛑 ScalpingBot gestopt door gebruiker.", to_slack=True)
+            self.log_message("🛑 ScalpingBot gestopt door gebruiker.", to_slack=True)
         finally:
             self.log_message("✅ ScalpingBot trading beëindigd.", to_slack=True)
 
 
+
+
+
+
+            
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Async scalping bot met dynamische stoploss en risicodeling"

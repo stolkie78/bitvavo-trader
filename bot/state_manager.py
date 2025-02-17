@@ -278,7 +278,7 @@ class StateManager:
             revenue = current_price * quantity * (1 - fee_percentage / 100)
             profit = revenue - cost_basis
             self.logger.log(
-                f"[{self.bot_name}]⛔️ {self.pair}: Stop loss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
+                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
                 to_console=True
             )
 
