@@ -209,16 +209,16 @@ class TraderBot:
                                 self.config.get("STOP_LOSS_WAIT_TIME", 5)
                             )
 
+
                     # --- Koop-/verkooplogica met EMA thresholds en dynamische risicodeling ---
                     if rsi is not None and ema is not None:
-                        # Bereken het procentuele verschil tussen huidige prijs en EMA
+                        # Calculate the percentage difference between current price and EMA
                         ema_diff = (current_price - ema) / ema
-                        # Formatteer EMA voor logging
+                        # Format EMA for logging
                         ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
 
-                        # Verkooplogica:
-                        # Als RSI boven drempel ligt en de prijs ligt relatief tot de EMA onder de EMA_SELL_THRESHOLD
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.config.get("EMA_SELL_THRESHOLD", -0.002):
+                        # Sell Condition:
+                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
@@ -235,9 +235,8 @@ class TraderBot:
                                             current_price,
                                             self.config["TRADE_FEE_PERCENTAGE"]
                                         )
-                        # Kooplogica:
-                        # Als RSI onder de koopdrempel ligt en de prijs ligt relatief tot de EMA boven de EMA_BUY_THRESHOLD
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.config.get("EMA_BUY_THRESHOLD", 0.002):
+                        # Buy Condition:
+                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
                             max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
                                 try:
@@ -246,34 +245,28 @@ class TraderBot:
                                         limit=self.config.get("ATR_PERIOD", 14) + 1, interval=self.rsi_interval
                                     )
                                     atr_value = TradingUtils.calculate_atr(
-                                        candle_data, period=self.config.get(
-                                            "ATR_PERIOD", 14)
+                                        candle_data, period=self.config.get("ATR_PERIOD", 14)
                                     )
                                 except Exception as e:
                                     self.log_message(
-                                        f"❌ Fout bij ATR berekening voor {pair}: {e}")
+                                        f"❌ Fout bij ATR berekening voor {pair}: {e}"
+                                    )
                                     atr_value = None
 
                                 if atr_value is not None:
-                                    total_budget = self.config.get(
-                                        "TOTAL_BUDGET", 10000.0)
-                                    risk_percentage = self.config.get(
-                                        "RISK_PERCENTAGE", 0.01)
-                                    atr_multiplier = self.config.get(
-                                        "ATR_MULTIPLIER", 1.5)
+                                    total_budget = self.config.get("TOTAL_BUDGET", 10000.0)
+                                    risk_percentage = self.config.get("RISK_PERCENTAGE", 0.01)
+                                    atr_multiplier = self.config.get("ATR_MULTIPLIER", 1.5)
                                     risk_amount = total_budget * risk_percentage
                                     risk_per_unit = atr_multiplier * atr_value
                                     dynamic_quantity = risk_amount / risk_per_unit
 
-                                    # Zorg dat het bedrag binnen het budget voor het pair valt
-                                    allocated_budget = self.pair_budgets[pair] / \
-                                        max_trades
+                                    allocated_budget = self.pair_budgets[pair] / max_trades
                                     max_quantity = allocated_budget / current_price
-                                    final_quantity = min(
-                                        dynamic_quantity, max_quantity)
+                                    final_quantity = min(dynamic_quantity, max_quantity)
 
                                     self.log_message(
-                                        f"🟢 Koopt {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff={ema_diff:.4f} | "
+                                        f"🟢 Koopt {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | "
                                         f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
                                         to_slack=True
                                     )
@@ -293,6 +286,38 @@ class TraderBot:
                                     f"{pair}: 🤚 Skipping buy ({len(open_positions)}) - max trades ({max_trades}) bereikt.",
                                     to_slack=True
                                 )
+                        # Explain why no trade was executed
+                        else:
+                            if self.config.get("EXPLAIN", False):
+                                explanation_lines = []
+                                if rsi >= self.config["RSI_SELL_THRESHOLD"]:
+                                    # Sell side: condition not met because ema_diff is not low enough
+                                    if ema_diff > self.ema_sell_threshold:
+                                        explanation_lines.append(
+                                            f"Voor verkoop: EMA diff ({ema_diff:.4f}) is te hoog; moet ≤ {self.ema_sell_threshold}"
+                                        )
+                                else:
+                                    explanation_lines.append(
+                                        f"Voor verkoop: RSI ({rsi:.2f}) is te laag; moet ≥ {self.config['RSI_SELL_THRESHOLD']}"
+                                    )
+                                if rsi <= self.config["RSI_BUY_THRESHOLD"]:
+                                    # Buy side: condition not met because ema_diff is not high enough
+                                    if ema_diff < self.ema_buy_threshold:
+                                        explanation_lines.append(
+                                            f"Voor aankoop: EMA diff ({ema_diff:.4f}) is te laag; moet ≥ {self.ema_buy_threshold}"
+                                        )
+                                else:
+                                    explanation_lines.append(
+                                        f"Voor aankoop: RSI ({rsi:.2f}) is te hoog; moet ≤ {self.config['RSI_BUY_THRESHOLD']}"
+                                    )
+                                max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
+                                if len(open_positions) >= max_trades:
+                                    explanation_lines.append(
+                                        f"Maximale open trades bereikt: {len(open_positions)}/{max_trades}"
+                                    )
+                                if explanation_lines:
+                                    self.log_message(
+                                        f"[EXPLAIN] {pair}: " + "; ".join(explanation_lines))
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
             self.log_message("🛑 TraderBot gestopt door gebruiker.", to_slack=True)
