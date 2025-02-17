@@ -161,17 +161,13 @@ class ScalpingBot:
                         )
 
                     # Formatteer de prijs en EMA voor logging
+                    open_positions = self.state_managers[pair].get_open_positions()
                     price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
                     if ema is not None:
                         ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
                         self.log_message(
-                            f"💎 {pair}: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}"
+                            f"💎 {pair}[{len(open_positions)}]: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}"
                         )
-
-                    # Verkrijg open posities voor het pair
-                    open_positions = self.state_managers[pair].get_open_positions()
-                    self.log_message(
-                        f"📂 {pair}: Open positions: {len(open_positions)}")
 
                     # --- (Optioneel) Dynamische stoploss voor open posities ---
                     for position in open_positions:
