@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: test-scalper
+  name: test-trader
   labels:
-    app: test-scalper
+    app: test-trader
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: test-scalper
+      app: test-trader
   template:
     metadata:
       labels:
-        app: test-scalper
+        app: test-trader
     spec:
       initContainers:
       - name: copy-config
@@ -21,21 +21,21 @@ spec:
         - sh
         - -c
         - |
-          echo "Inhoud van /scalper:" && ls -la /scalper
+          echo "Inhoud van /trader:" && ls -la /trader
           echo "Inhoud van /connection:" && ls -la /connection
-          cp -rL /scalper/* /merged/ && cp -rL /connection/* /merged/
+          cp -rL /trader/* /merged/ && cp -rL /connection/* /merged/
           echo "Inhoud van /merged:" && ls -la /merged
         volumeMounts:
-        - name: scalper-config
-          mountPath: /scalper
+        - name: trader-config
+          mountPath: /trader
         - name: connection-config
           mountPath: /connection
         - name: merged-config
           mountPath: /merged
 
       containers:
-      - name: bitvavo-scalper
-        image: bitvavo-scalper:0.1.23
+      - name: bitvavo-trader
+        image: bitvavo-trader:0.1.23
         resources:
           limits:
             memory: "256Mi"
@@ -51,14 +51,14 @@ spec:
           mountPath: /app/data
         args:
         - "--config"
-        - "/app/config/scalper.json"
+        - "/app/config/trader.json"
         ports:
         - containerPort: 8080
           name: http
       volumes:
-      - name: scalper-config
+      - name: trader-config
         configMap:
-          name: scalper-config
+          name: trader-config
       - name: connection-config
         configMap:
           name: connection-config

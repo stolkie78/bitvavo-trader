@@ -9,7 +9,7 @@ handle_error() {
 # Validate input arguments
 if [ "$#" -ne 3 ]; then
   echo "Usage: $0 <image_name> <tag> <config_name>"
-  echo "Example: $0 bitvavo-scalper 0.1.0 top5_config"
+  echo "Example: $0 bitvavo-trader 0.1.0 top5_config"
   exit 1
 fi
 

@@ -1,7 +1,7 @@
 
-# Bitvavo Scalping Bot
+# Bitvavo Trader Bot
 
-The Bitvavo Scalping Bot is an automated cryptocurrency trading bot designed to execute rapid buy and sell operations based on predefined conditions such as RSI thresholds, profit targets, and LightGBM-based AI predictions. This bot is capable of tracking multiple cryptocurrency pairs and includes features like trade logging, restartable states, and Slack notifications.
+The Bitvavo Trader Bot is an automated cryptocurrency trading bot designed to execute rapid buy and sell operations based on predefined conditions such as RSI thresholds, profit targets, and LightGBM-based AI predictions. This bot is capable of tracking multiple cryptocurrency pairs and includes features like trade logging, restartable states, and Slack notifications.
 
 ## Features
 
@@ -15,9 +15,9 @@ The Bitvavo Scalping Bot is an automated cryptocurrency trading bot designed to 
 ## File Structure
 
 ```
-bitvavo-scalper/
+bitvavo-trader/
 ├── bot/
-│   ├── scalping_bot.py        # Main bot script
+│   ├── trader.py        # Main bot script
 │   ├── state_manager.py       # Manages trading state and positions
 │   ├── trading_utils.py       # Utility functions for trading
 │   ├── config_loader.py       # Handles loading and validation of configuration files
@@ -106,17 +106,17 @@ These files allow the bot to resume trading without losing its current portfolio
 
 #### Locally
 ```bash
-python bot/scalping_bot.py --config config/top_5_crypto_config.json
+python bot/trader.py --config config/top_5_crypto_config.json
 ```
 
 #### With Docker
 1. Build the Docker image:
    ```bash
-   ./build.sh bitvavo-scalper latest
+   ./build.sh bitvavo-trader latest
    ```
 2. Run the container:
    ```bash
-   ./run.sh bitvavo-scalper latest top_5_crypto_config
+   ./run.sh bitvavo-trader latest top_5_crypto_config
    ```
 
 ## Trade and Portfolio Logging

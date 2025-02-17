@@ -20,4 +20,4 @@ COPY bot/. bot/
 COPY tools/. tools/
 
 # Stel een standaard entrypoint in
-ENTRYPOINT ["python", "bot/scalping_bot.py"]
+ENTRYPOINT ["python", "bot/trader.py"]

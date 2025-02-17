@@ -1,9 +1,9 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: test-scalper-config
+  name: test-trader-config
 data:
-  scalper.json: |-
+  trader.json: |-
     {
       "PROFILE": "TEST",
       "PAIRS": ["BTC-EUR", "ETH-EUR"],

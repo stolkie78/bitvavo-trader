@@ -83,7 +83,7 @@ Below is a detailed explanation of each configuration parameter:
 
 To run the bot in a Docker container, use the following command:
 ```bash
-docker run --rm -v $(pwd)/config:/app/config bitvavo-scalper:latest --config /app/config/scalper.json
+docker run --rm -v $(pwd)/config:/app/config bitvavo-trader:latest --config /app/config/trader.json
 ```
 
 ---
@@ -96,26 +96,26 @@ An example Kubernetes deployment can be found in the `kubernetes/` directory. He
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: bitvavo-scalper
+  name: bitvavo-trader
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: bitvavo-scalper
+      app: bitvavo-trader
   template:
     metadata:
       labels:
-        app: bitvavo-scalper
+        app: bitvavo-trader
     spec:
       containers:
-      - name: bitvavo-scalper
-        image: bitvavo-scalper:latest
+      - name: bitvavo-trader
+        image: bitvavo-trader:latest
         env:
         - name: BOT_NAME
-          value: "bitvavo-scalper"
+          value: "bitvavo-trader"
         args:
         - "--config"
-        - "/app/config/scalper.json"
+        - "/app/config/trader.json"
 ```
 
 ---
