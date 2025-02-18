@@ -219,7 +219,7 @@ class TraderBot:
                     # --- Koop-/verkooplogica met EMA thresholds en dynamische risicodeling ---
 
                         # Sell Condition:
-                        if self.profile == "TRADER":
+                        if self.type == "TRADER":
                             if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
                                 if open_positions:
                                     for pos in open_positions:
