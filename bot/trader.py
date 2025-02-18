@@ -266,7 +266,7 @@ class TraderBot:
                                     final_quantity = min(dynamic_quantity, max_quantity)
 
                                     self.log_message(
-                                        f"🟢 Koopt {pair}: Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | "
+                                        f"🟢 {pair}: BUYING Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | "
                                         f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
                                         to_slack=True
                                     )
@@ -323,11 +323,6 @@ class TraderBot:
             self.log_message("🛑 TraderBot gestopt door gebruiker.", to_slack=True)
         finally:
             self.log_message("✅ TraderBot trading beëindigd.", to_slack=True)
-
-
-
-
-
 
             
 if __name__ == "__main__":
