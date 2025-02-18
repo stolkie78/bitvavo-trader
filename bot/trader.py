@@ -18,7 +18,7 @@ class TraderBot:
     """
     Async Trader Bot met dynamische stoploss en dynamische risicodeling.
     """
-    VERSION = "0.3.1"
+    VERSION = "0.5.3"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -163,10 +163,16 @@ class TraderBot:
                     # Formatteer de prijs en EMA voor logging
                     open_positions = self.state_managers[pair].get_open_positions()
                     price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
-                    if ema is not None:
+                    # Binnen de loop voor elk pair, na het berekenen van de EMA en RSI:
+                    if rsi is not None and ema is not None:
+                        # Bereken het procentuele verschil tussen de huidige prijs en de EMA
+                        ema_diff = (current_price - ema) / ema
+                        # Formatteer de prijs en EMA voor logging
+                        price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
                         ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
+
                         self.log_message(
-                            f"💎 {pair}[{len(open_positions)}]: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str}"
+                            f"💎 {pair}[{len(open_positions)}]: Price={price_str} EUR - RSI={rsi:.2f} - EMA={ema_str} - EMA diff: {ema_diff:.4f}"
                         )
 
                     # --- (Optioneel) Dynamische stoploss voor open posities ---
@@ -211,11 +217,8 @@ class TraderBot:
 
 
                     # --- Koop-/verkooplogica met EMA thresholds en dynamische risicodeling ---
-                    if rsi is not None and ema is not None:
-                        # Calculate the percentage difference between current price and EMA
-                        ema_diff = (current_price - ema) / ema
-                        # Format EMA for logging
-                        ema_str = f"{ema:.8f}" if ema < 1 else f"{ema:.2f}"
+
+
 
                         # Sell Condition:
                         if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
@@ -226,7 +229,7 @@ class TraderBot:
                                     )
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 Verkopen {pair}: Berekende winst {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}",
+                                            f"🔴 {pair}: SELLING Berekende winst {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
