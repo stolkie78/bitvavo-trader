@@ -18,7 +18,7 @@ class TraderBot:
     """
     Async Trader Bot met dynamische stoploss en dynamische risicodeling.
     """
-    VERSION = "0.5.3"
+    VERSION = "0.5.4"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -50,6 +50,7 @@ class TraderBot:
         self.ema_history = {pair: [] for pair in config["PAIRS"]}
         self.ema_buy_threshold = self.config.get("EMA_BUY_THRESHOLD", 0.002)
         self.ema_sell_threshold = self.config.get("EMA_SELL_THRESHOLD", -0.002)
+        self.type = self.config.get("TYPE", "TRADER").upper()
 
         # Haal historische prijzen op voor elke pair (voor RSI en EMA)
         for pair in config["PAIRS"]:
@@ -118,7 +119,7 @@ class TraderBot:
         Toon de startup-parameters.
         """
         startup_info = {**self.config}
-        self.log_message("🚀 TraderBot wordt gestart.", to_slack=True)
+        self.log_message(f"🚀 TraderBot wordt gestart in {self.type} mode.", to_slack=True)
         self.log_message(
             f"⚠️ Startup info:\n{json.dumps(startup_info, indent=2)}", to_slack=True)
 
@@ -215,80 +216,82 @@ class TraderBot:
                                 self.config.get("STOP_LOSS_WAIT_TIME", 5)
                             )
 
-
                     # --- Koop-/verkooplogica met EMA thresholds en dynamische risicodeling ---
 
-
-
                         # Sell Condition:
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
-                            if open_positions:
-                                for pos in open_positions:
-                                    profit_percentage = self.state_managers[pair].calculate_profit_for_position(
-                                        pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
-                                    )
-                                    if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
+                        if self.profile == "TRADER":
+                            if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
+                                if open_positions:
+                                    for pos in open_positions:
+                                        profit_percentage = self.state_managers[pair].calculate_profit_for_position(
+                                            pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
+                                        )
+                                        if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
+                                            self.log_message(
+                                                f"🔴 {pair}: SELLING Berekende winst {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}",
+                                                to_slack=True
+                                            )
+                                            await asyncio.to_thread(
+                                                self.state_managers[pair].sell_position,
+                                                pos,
+                                                current_price,
+                                                self.config["TRADE_FEE_PERCENTAGE"]
+                                            )
                                         self.log_message(
-                                            f"🔴 {pair}: SELLING Berekende winst {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}",
+                                            f"{pair}: 🤚 Skipping sell ({len(open_positions)}) - max trades HODL mode",
+                                            to_slack=True
+                                        )
+                            # Buy Condition:
+                            elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
+                                max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
+                                if len(open_positions) < max_trades:
+                                    try:
+                                        candle_data = await asyncio.to_thread(
+                                            TradingUtils.fetch_historical_candles, self.bitvavo, pair,
+                                            limit=self.config.get("ATR_PERIOD", 14) + 1, interval=self.rsi_interval
+                                        )
+                                        atr_value = TradingUtils.calculate_atr(
+                                            candle_data, period=self.config.get("ATR_PERIOD", 14)
+                                        )
+                                    except Exception as e:
+                                        self.log_message(
+                                            f"❌ Fout bij ATR berekening voor {pair}: {e}"
+                                        )
+                                        atr_value = None
+
+                                    if atr_value is not None:
+                                        total_budget = self.config.get("TOTAL_BUDGET", 10000.0)
+                                        risk_percentage = self.config.get("RISK_PERCENTAGE", 0.01)
+                                        atr_multiplier = self.config.get("ATR_MULTIPLIER", 1.5)
+                                        risk_amount = total_budget * risk_percentage
+                                        risk_per_unit = atr_multiplier * atr_value
+                                        dynamic_quantity = risk_amount / risk_per_unit
+
+                                        allocated_budget = self.pair_budgets[pair] / max_trades
+                                        max_quantity = allocated_budget / current_price
+                                        final_quantity = min(dynamic_quantity, max_quantity)
+
+                                        self.log_message(
+                                            f"🟢 {pair}: BUYING Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | "
+                                            f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
-                                            self.state_managers[pair].sell_position,
-                                            pos,
+                                            self.state_managers[pair].buy_dynamic,
                                             current_price,
+                                            final_quantity,
                                             self.config["TRADE_FEE_PERCENTAGE"]
                                         )
-                        # Buy Condition:
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
-                            max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
-                            if len(open_positions) < max_trades:
-                                try:
-                                    candle_data = await asyncio.to_thread(
-                                        TradingUtils.fetch_historical_candles, self.bitvavo, pair,
-                                        limit=self.config.get("ATR_PERIOD", 14) + 1, interval=self.rsi_interval
-                                    )
-                                    atr_value = TradingUtils.calculate_atr(
-                                        candle_data, period=self.config.get("ATR_PERIOD", 14)
-                                    )
-                                except Exception as e:
-                                    self.log_message(
-                                        f"❌ Fout bij ATR berekening voor {pair}: {e}"
-                                    )
-                                    atr_value = None
-
-                                if atr_value is not None:
-                                    total_budget = self.config.get("TOTAL_BUDGET", 10000.0)
-                                    risk_percentage = self.config.get("RISK_PERCENTAGE", 0.01)
-                                    atr_multiplier = self.config.get("ATR_MULTIPLIER", 1.5)
-                                    risk_amount = total_budget * risk_percentage
-                                    risk_per_unit = atr_multiplier * atr_value
-                                    dynamic_quantity = risk_amount / risk_per_unit
-
-                                    allocated_budget = self.pair_budgets[pair] / max_trades
-                                    max_quantity = allocated_budget / current_price
-                                    final_quantity = min(dynamic_quantity, max_quantity)
-
-                                    self.log_message(
-                                        f"🟢 {pair}: BUYING Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | "
-                                        f"Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})",
-                                        to_slack=True
-                                    )
-                                    await asyncio.to_thread(
-                                        self.state_managers[pair].buy_dynamic,
-                                        current_price,
-                                        final_quantity,
-                                        self.config["TRADE_FEE_PERCENTAGE"]
-                                    )
+                                    else:
+                                        self.log_message(
+                                            f"❌ Kan ATR niet berekenen voor {pair}. Koopaankoop overgeslagen.",
+                                            to_slack=True
+                                        )
                                 else:
                                     self.log_message(
-                                        f"❌ Kan ATR niet berekenen voor {pair}. Koopaankoop overgeslagen.",
+                                        f"{pair}: 🤚 Skipping buy ({len(open_positions)}) - max trades ({max_trades}) bereikt.",
                                         to_slack=True
                                     )
-                            else:
-                                self.log_message(
-                                    f"{pair}: 🤚 Skipping buy ({len(open_positions)}) - max trades ({max_trades}) bereikt.",
-                                    to_slack=True
-                                )
                         # Explain why no trade was executed
                         else:
                             if self.config.get("EXPLAIN", False):
@@ -362,28 +365,39 @@ if __name__ == "__main__":
     bot = TraderBot(config, logger, state_managers, bitvavo_instance, args)
     asyncio.run(bot.run())
 
-def check_stop_loss(self, pair, current_price):
-    """ Controleert of een stop-loss moet worden geactiveerd en verkoopt de positie indien nodig. """
-    open_positions = self.state_managers[pair].get_open_positions()
-    for position in open_positions:
-        stop_loss_price = position["price"] * (1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
 
-        if current_price <= stop_loss_price:
-            self.log_message(
-                f"⛔️ {pair}: Stop loss triggered for {pair}: current price {current_price:.2f} is below threshold {stop_loss_price:.2f}",
-                to_slack=True
-            )
-
-            # Probeer de verkoop met een retry-mechanisme
-            sell_success = self.state_managers[pair].sell_position_with_retry(
-                position,
-                current_price,
-                self.config["TRADE_FEE_PERCENTAGE"],
-                self.config.get("STOP_LOSS_MAX_RETRIES", 3),
-                self.config.get("STOP_LOSS_WAIT_TIME", 5)
-            )
-
-            if sell_success:
-                self.log_message(f"✅ {pair}: Stop-loss verkoop geslaagd voor {current_price:.2f}", to_slack=True)
-            else:
-                self.log_message(f"❌ {pair}: Stop-loss verkoop mislukt, herproberen...", to_slack=True)
+    def check_stop_loss(self, pair, current_price):
+        """ Controleert of een stop-loss moet worden geactiveerd en verkoopt de positie indien nodig. """
+        open_positions = self.state_managers[pair].get_open_positions()
+    
+        for position in open_positions:
+            stop_loss_price = position["price"] * \
+                (1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
+    
+            if current_price <= stop_loss_price:
+                self.log_message(
+                    f"⛔️ {pair}: Stop-loss bereikt! Prijs: {current_price:.2f}, Threshold: {stop_loss_price:.2f}",
+                    to_slack=True
+                )
+    
+                # Alleen verkopen in TRADER mode
+                if self.type == "TRADER":
+                    sell_success = self.state_managers[pair].sell_position_with_retry(
+                        position,
+                        current_price,
+                        self.config["TRADE_FEE_PERCENTAGE"],
+                        self.config.get("STOP_LOSS_MAX_RETRIES", 3),
+                        self.config.get("STOP_LOSS_WAIT_TIME", 5)
+                    )
+    
+                    if sell_success:
+                        self.log_message(
+                            f"✅ {pair}: Stoploss verkoop geslaagd op {current_price:.2f}", to_slack=True)
+                    else:
+                        self.log_message(
+                            f"❌ {pair}: Stoploss verkoop mislukt, herproberen...", to_slack=True)
+                else:
+                    # Log de stop-loss, maar onderneem geen actie in HODL mode
+                    self.log_message(
+                        f"🛑 {pair}: Stoploss bereikt, maar geen verkoop in HODL mode.", to_slack=True
+                    )
