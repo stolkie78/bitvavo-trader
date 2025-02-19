@@ -137,7 +137,7 @@ class TraderBot:
                                             self.log_message(f"🔴 {pair}: SELLING Calculated profit {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}", to_slack=True)
                                             await asyncio.to_thread(self.state_managers[pair].sell_position, pos, current_price, self.config["TRADE_FEE_PERCENTAGE"])
                                         else:
-                                            self.log_message(f"{pair}: 🤚 Skipping sell ({len(open_positions)}) - max trades HODL mode", to_slack=True)
+                                            self.log_message(f"{pair}: 🤚 Skipping sell ({len(open_positions)}) - max trades", to_slack=True)
                             elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
                                 max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                                 if len(open_positions) < max_trades:
