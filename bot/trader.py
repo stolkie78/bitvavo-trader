@@ -13,7 +13,7 @@ from bot.bitvavo_client import bitvavo
 from bot.logging_facility import LoggingFacility
 
 class TraderBot:
-    VERSION = "0.5.6"
+    VERSION = "0.5.7"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
