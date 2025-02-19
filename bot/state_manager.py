@@ -498,3 +498,9 @@ class StateManager:
                 to_console=True,
                 to_slack=True
             )
+
+    def get_price_history(self):
+        """
+        Haal de laatste prijs geschiedenis op van de markt.
+        """
+        return self.price_history if hasattr(self, "price_history") else []

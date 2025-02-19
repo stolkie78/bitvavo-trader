@@ -133,7 +133,7 @@ class TraderBot:
                                         self.log_message(f"🔴 {pair}: SELLING Calculated profit {profit_percentage:.2f}% | EMA diff: {ema_diff:.4f}", to_slack=True)
                                         await asyncio.to_thread(self.state_managers[pair].sell_position, pos, current_price, self.config["TRADE_FEE_PERCENTAGE"])
                                     else:
-                                        self.log_message(f"{pair}: 🤚 Skipping sell ({len(open_positions)}) - max trades", to_slack=True)
+                                        self.log_message(f"🤚 {pair}: Skipping sell ({len(open_positions)}) - max trades", to_slack=True)
                         elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
                             max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
@@ -156,9 +156,9 @@ class TraderBot:
                                     self.log_message(f"🟢 {pair}: BUYING Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})", to_slack=True)
                                     await asyncio.to_thread(self.state_managers[pair].buy_dynamic, current_price, final_quantity, self.config["TRADE_FEE_PERCENTAGE"])
                                 else:
-                                    self.log_message(f"{pair}: ❌ Cannot calculate ATR for {pair}. Purchase skipped.", to_slack=True)
+                                    self.log_message(f" ❌ {pair}: Cannot calculate ATR for {pair}. Purchase skipped.", to_slack=True)
                             else:
-                                self.log_message(f"{pair}: 🤚 Skipping buy ({len(open_positions)}) - max trades ({max_trades}) reached.", to_slack=True)
+                                self.log_message(f"🤚 {pair}: Skipping buy ({len(open_positions)}) - max trades ({max_trades}) reached.", to_slack=True)
 
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
