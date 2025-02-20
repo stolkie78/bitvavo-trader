@@ -166,10 +166,10 @@ class StateManager:
             self.log_trade("buy", price, quantity)
             self.logger.log(
                 f"[{self.bot_name}] {self.pair}: 👽 Bought Price={price:.2f}, Quantity={quantity:.6f}",
-                to_console=True, to_slack=True
+                to_console=True, to_slack=False
             )
         else:
-            error_msg = f"[{self.bot_name}] {self.pair}: 👽 Failed to execute buy order {order}"
+            error_msg = f"[{self.bot_name}] ❌ {self.pair}: Failed to execute buy order {order}"
             self.logger.log(error_msg, to_console=True, to_slack=True)
 
     def sell(self, price, fee_percentage):
@@ -210,7 +210,7 @@ class StateManager:
         quantity = self.adjust_quantity(self.pair, quantity)
         if quantity <= 0:
             self.logger.log(
-                f"[{self.bot_name}] {self.pair}: 👽 Invalid quantity {quantity}", to_console=True, to_slack=True)
+                f"[{self.bot_name}] {self.pair}: ❌ Invalid quantity {quantity}", to_console=True, to_slack=True)
             return
 
         # Add spent column with real buy amount
@@ -242,7 +242,7 @@ class StateManager:
             self.save_portfolio()
             self.logger.log(
                 f"[{self.bot_name}] {self.pair}: 👽 Sold: Price={price:.2f}, Profit={profit_to_log:.2f}",
-                to_console=True, to_slack=True
+                to_console=True, to_slack=False
             )
         else:
             self.logger.log(
@@ -322,7 +322,7 @@ class StateManager:
         open_positions = self.get_open_positions()
         if not open_positions:
             self.logger.log(
-                f"[{self.bot_name}] ❌ No active position for {self.pair}. Skipping profit calculation.",
+                f"[{self.bot_name}] {self.pair}: ❌ No active position,  Skipping profit calculation.",
                 to_console=True
             )
             return None
@@ -454,7 +454,7 @@ class StateManager:
 
         if available_balance < price * quantity:
             self.logger.log(
-                f"[{self.bot_name}] ❌ {self.pair}: Onvoldoende saldo. Vereist: {price * quantity:.2f} EUR, beschikbaar: {available_balance:.2f} EUR",
+                f"[{self.bot_name}] ❌ {self.pair}: Insufficient funds. Needed: {price * quantity:.2f} EUR, Available: {available_balance:.2f} EUR",
                 to_console=True,
                 to_slack=True
             )
@@ -464,7 +464,7 @@ class StateManager:
         quantity = self.adjust_quantity(self.pair, quantity)
         if quantity <= 0:
             self.logger.log(
-                f"[{self.bot_name}] ❌ Ongeldige quantity voor {self.pair}: {quantity}",
+                f"[{self.bot_name}] ❌ Invalid quantity {self.pair}: {quantity}",
                 to_console=True,
                 to_slack=True
             )
