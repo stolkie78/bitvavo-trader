@@ -13,33 +13,39 @@ class TradingUtils:
         """
         Fetches the current price of a trading pair using the Bitvavo API.
         Automatically performs retries for temporary errors.
-        
+
+        If the API request fails after all attempts, the function logs a warning
+        and returns None instead of raising an exception.
+
         :param bitvavo: Configured Bitvavo API client.
         :param pair: Trading pair, for example "BTC-EUR".
-        :param retries: Number of attempts before throwing an error (default: 3).
+        :param retries: Number of attempts before returning None (default: 3).
         :param delay: Delay in seconds between attempts (default: 2).
-        :return: Current price as a float.
-        :raises: RuntimeError if a valid response is not received after all attempts.
+        :return: Current price as a float, or None if fetching fails.
         """
         for attempt in range(1, retries + 1):
             try:
                 ticker = bitvavo.tickerPrice({"market": pair})
                 if isinstance(ticker, str):
                     ticker = json.loads(ticker)
+
                 if "price" in ticker:
                     price = float(ticker["price"])
-                    logging.debug(
-                        "Fetched current price for %s: %s", pair, price)
+                    logging.debug(f"✅ [{pair}] Price fetched successfully: {price:.8f}")
                     return price
-                else:
-                    raise ValueError(f"Unexpected response format: {ticker}")
+
+                logging.warning(f"⚠️ [{pair}] Attempt {attempt}/{retries} failed: Unexpected response format - {ticker}")
+
+            except json.JSONDecodeError as e:
+                logging.warning(f"⚠️ [{pair}] Attempt {attempt}/{retries} JSON Decode Error: {e}")
             except Exception as e:
-                logging.warning(
-                    "Attempt %d to fetch current price for %s failed: %s", attempt, pair, e)
-                if attempt == retries:
-                    raise RuntimeError(
-                        f"Error fetching current price for {pair}: {e}") from e
-                time.sleep(delay)
+                logging.warning(f"⚠️ [{pair}] Attempt {attempt}/{retries} API request failed: {e}")
+
+            time.sleep(delay)
+
+        logging.error(f"❌ [{pair}] Failed to fetch current price after {retries} attempts. Skipping this cycle.")
+        return None
+
 
     @staticmethod
     def calculate_rsi(price_history, window_size):

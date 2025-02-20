@@ -89,13 +89,19 @@ class TraderBot:
                 self.log_message(f"🐌 New cycle started at {datetime.now()}")
                 for pair in self.config["PAIRS"]:
                     current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, pair)
-                    self.price_history[pair].append(current_price)
-                    if len(self.price_history[pair]) > self.rsi_points:
-                        self.price_history[pair].pop(0)
 
-                    self.ema_history[pair].append(current_price)
-                    if len(self.ema_history[pair]) > self.ema_points:
-                        self.ema_history[pair].pop(0)
+                    if current_price is None:
+                        self.log_message(f"⚠️ [{pair}] Skipping trade cycle - Unable to fetch current price after {TradingUtils.RETRIES} attempts.", to_slack=True)
+                        continue  # Skip this iteration
+
+                    if current_price is not None:
+                        self.price_history[pair].append(current_price)
+                        if len(self.price_history[pair]) > self.rsi_points:
+                            self.price_history[pair].pop(0)
+
+                        self.ema_history[pair].append(current_price)
+                        if len(self.ema_history[pair]) > self.ema_points:
+                            self.ema_history[pair].pop(0)
 
                     ema = None
                     if len(self.ema_history[pair]) >= self.ema_points:
