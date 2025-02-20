@@ -136,7 +136,28 @@ class TraderBot:
                                 # Registreer het moment van de stoploss voor cooldown
                                 self.last_stoploss_time[pair] = time.time()
                                 self.log_message(f"🚫 [{pair}] Stoploss triggered at {current_price:.2f}, cooldown activated.", to_slack=True)
-                                                        # Voer de verkoop uit via een retry-methode
+                                                        
+                            # Controleer het saldo voordat we proberen te verkopen
+                            current_balance = self.state_managers[pair].get_balance()
+
+                            if position["quantity"] > current_balance:
+                                self.log_message(f"❌ [{pair}] Stoploss failed - Insufficient balance! Removing from portfolio.", to_slack=True)
+                                self.state_managers[pair].remove_position(position)
+                                return  # Stop verdere verwerking
+
+                            try:
+                                await asyncio.to_thread(
+                                    self.state_managers[pair].sell_position_with_retry, 
+                                    position, 
+                                    current_price, 
+                                    self.config["TRADE_FEE_PERCENTAGE"], 
+                                    self.config.get("STOP_LOSS_MAX_RETRIES", 3), 
+                                    self.config.get("STOP_LOSS_WAIT_TIME", 5)
+                                )
+                            except RuntimeError as e:
+                                self.log_message(f"❌ [{pair}] Stoploss failed after retries: {e}. Removing from portfolio.", to_slack=True)
+                                self.state_managers[pair].remove_position(position)
+
                             await asyncio.to_thread(self.state_managers[pair].sell_position_with_retry, position, current_price, self.config["TRADE_FEE_PERCENTAGE"], self.config.get("STOP_LOSS_MAX_RETRIES", 3), self.config.get("STOP_LOSS_WAIT_TIME", 5))
                         if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
                             if open_positions:

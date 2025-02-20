@@ -522,3 +522,16 @@ def show_all_open_positions():
             print(f"Error reading the portfolio file: {e}")
     else:
         print("Portfolio file does not exist or is empty.")
+
+    def get_balance(self):
+        """Returns the current available balance of the asset."""
+        response = self.bitvavo.balance()
+        for asset in response:
+            if asset["symbol"] == self.pair.split("-")[0]:  # BTC-EUR → BTC
+                return float(asset["available"])
+        return 0.0  # Als asset niet gevonden is, is het saldo 0
+    
+    def remove_position(self, position):
+        """Removes the position from the portfolio after a failed stoploss."""
+        self.portfolio[self.pair].remove(position)
+        self.log_message(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_slack=True)
