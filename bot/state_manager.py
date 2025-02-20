@@ -533,4 +533,4 @@ class StateManager:
     def remove_position(self, position):
             """Removes the position from the portfolio after a failed stoploss."""
             self.portfolio[self.pair].remove(position)
-            self.log_message(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_slack=True)
+            self.logger.log(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_console=True, to_slack=True)
