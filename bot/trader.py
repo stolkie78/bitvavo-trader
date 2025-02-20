@@ -4,6 +4,7 @@ import os
 import json
 import argparse
 import pandas as pd
+import time
 
 from datetime import datetime
 from bot.config_loader import ConfigLoader
@@ -34,6 +35,10 @@ class TraderBot:
         self.ema_history = {pair: [] for pair in config["PAIRS"]}
         self.ema_buy_threshold = self.config.get("EMA_BUY_THRESHOLD", 0.002)
         self.ema_sell_threshold = self.config.get("EMA_SELL_THRESHOLD", -0.002)
+
+        # Stoploss Cooldown
+        self.last_stoploss_time = {pair: None for pair in config["PAIRS"]}
+        self.stoploss_cooldown = config.get("STOP_LOSS_COOLDOWN", 300)  # 5 minuten cooldown
         
         for pair in config["PAIRS"]:
             try:
@@ -128,9 +133,11 @@ class TraderBot:
 
                             dynamic_stoploss = position["price"] - (atr_value * self.config.get("ATR_MULTIPLIER", 1.5)) if atr_value else position["price"] * (1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
                             if current_price <= dynamic_stoploss:
-                                self.log_message(f"⛔️ {pair}: Stoploss triggered: current price {current_price:.2f} is below {dynamic_stoploss:.2f}", to_slack=True)
-                                await asyncio.to_thread(self.state_managers[pair].sell_position_with_retry, position, current_price, self.config["TRADE_FEE_PERCENTAGE"], self.config.get("STOP_LOSS_MAX_RETRIES", 3), self.config.get("STOP_LOSS_WAIT_TIME", 5))
-
+                                # Registreer het moment van de stoploss voor cooldown
+                                self.last_stoploss_time[pair] = time.time()
+                                self.log_message(f"🚫 [{pair}] Stoploss triggered at {current_price:.2f}, cooldown activated.", to_slack=True)
+                                                        # Voer de verkoop uit via een retry-methode
+                            await asyncio.to_thread(self.state_managers[pair].sell_position_with_retry, position, current_price, self.config["TRADE_FEE_PERCENTAGE"], self.config.get("STOP_LOSS_MAX_RETRIES", 3), self.config.get("STOP_LOSS_WAIT_TIME", 5))
                         if rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.ema_sell_threshold:
                             if open_positions:
                                 for pos in open_positions:
@@ -141,6 +148,14 @@ class TraderBot:
                                     else:
                                         self.log_message(f"🤚 {pair}: Skipping sell ({len(open_positions)}) - max trades", to_slack=False)
                         elif rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.ema_buy_threshold:
+                            last_sl_time = self.last_stoploss_time.get(pair)
+                            current_time = time.time()
+
+                            # Check of de cooldown nog actief is
+                            if last_sl_time and (current_time - last_sl_time) < self.stoploss_cooldown:
+                                self.log_message(f"⏳ [{pair}] Skipping buy - Cooldown active after stoploss ({self.stoploss_cooldown}s left).", to_slack=True)
+                                continue  # Sla de koopactie over
+                            
                             max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
                                 try:
@@ -149,6 +164,7 @@ class TraderBot:
                                 except Exception as e:
                                     self.log_message(f"❌ Error in ATR calculation for {pair}: {e}")
                                     atr_value = None
+
                                 if atr_value is not None:
                                     total_budget = self.config.get("TOTAL_BUDGET", 10000.0)
                                     risk_percentage = self.config.get("RISK_PERCENTAGE", 0.01)
@@ -159,13 +175,17 @@ class TraderBot:
                                     allocated_budget = self.pair_budgets[pair] / max_trades
                                     max_quantity = allocated_budget / current_price
                                     final_quantity = min(dynamic_quantity, max_quantity)
+
                                     self.log_message(f"🟢 {pair}: BUYING Price={current_price:.2f}, RSI={rsi:.2f}, EMA={ema_str}, EMA diff: {ema_diff:.4f} | Dynamic Quantity={final_quantity:.6f} (Risk per unit: {risk_per_unit:.2f})", to_slack=True)
                                     await asyncio.to_thread(self.state_managers[pair].buy_dynamic, current_price, final_quantity, self.config["TRADE_FEE_PERCENTAGE"])
+
+                                    # Registreer het moment van aankoop zodat een nieuwe stoploss-cooldown kan starten
+                                    self.last_stoploss_time[pair] = None
                                 else:
                                     self.log_message(f" ❌ {pair}: Cannot calculate ATR for {pair}. Purchase skipped.", to_slack=True)
                             else:
                                 self.log_message(f"🤚 {pair}: Skipping buy ({len(open_positions)}) - max trades ({max_trades}) reached.", to_slack=False)
-                
+
                 # Keep alive message every hour
                 check_interval_seconds = self.config["CHECK_INTERVAL"]
                 if check_interval_seconds % 3600 == 0:

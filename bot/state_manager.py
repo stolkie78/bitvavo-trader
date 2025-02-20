@@ -490,7 +490,7 @@ class StateManager:
             self.logger.log(
                 f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
                 to_console=True,
-                to_slack=True
+                to_slack=False
             )
         else:
             self.logger.log(
