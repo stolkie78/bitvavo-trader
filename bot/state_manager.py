@@ -531,6 +531,10 @@ class StateManager:
             return 0.0  # Als asset niet gevonden is, is het saldo 0
 
     def remove_position(self, position):
-            """Removes the position from the portfolio after a failed stoploss."""
+        """Removes the position from the portfolio after a failed stoploss and saves the update."""
+        if self.pair in self.portfolio and position in self.portfolio[self.pair]:
             self.portfolio[self.pair].remove(position)
+            self.save_portfolio()  # ⬅️ Save the updated portfolio to JSON
             self.logger.log(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_console=True, to_slack=True)
+        else:
+            self.logger.log(f"⚠️ [{self.pair}] Attempted to remove non-existent position.", to_console=True, to_slack=True)

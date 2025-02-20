@@ -143,7 +143,7 @@ class TraderBot:
                             if position["quantity"] > current_balance:
                                 self.log_message(f"❌ [{pair}] Stoploss failed - Insufficient balance! Removing from portfolio.", to_slack=True)
                                 self.state_managers[pair].remove_position(position)
-                                return  # Stop verdere verwerking
+                                continue
 
                             try:
                                 await asyncio.to_thread(
