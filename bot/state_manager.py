@@ -504,3 +504,21 @@ class StateManager:
         Haal de laatste prijs geschiedenis op van de markt.
         """
         return self.price_history if hasattr(self, "price_history") else []
+
+
+def show_all_open_positions():
+    data_dir = "data"
+    portfolio_file = os.path.join(data_dir, "portfolio.json")
+    
+    if os.path.exists(portfolio_file) and os.path.getsize(portfolio_file) > 0:
+        try:
+            with open(portfolio_file, "r") as file:
+                portfolio = json.load(file)
+                for pair, positions in portfolio.items():
+                    print(f"Pair: {pair}")
+                    for position in positions:
+                        print(f"  Position: {position}")
+        except json.JSONDecodeError as e:
+            print(f"Error reading the portfolio file: {e}")
+    else:
+        print("Portfolio file does not exist or is empty.")
