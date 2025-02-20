@@ -505,33 +505,32 @@ class StateManager:
         """
         return self.price_history if hasattr(self, "price_history") else []
 
+    def show_all_open_positions():
+        data_dir = "data"
+        portfolio_file = os.path.join(data_dir, "portfolio.json")
 
-def show_all_open_positions():
-    data_dir = "data"
-    portfolio_file = os.path.join(data_dir, "portfolio.json")
-    
-    if os.path.exists(portfolio_file) and os.path.getsize(portfolio_file) > 0:
-        try:
-            with open(portfolio_file, "r") as file:
-                portfolio = json.load(file)
-                for pair, positions in portfolio.items():
-                    print(f"Pair: {pair}")
-                    for position in positions:
-                        print(f"  Position: {position}")
-        except json.JSONDecodeError as e:
-            print(f"Error reading the portfolio file: {e}")
-    else:
-        print("Portfolio file does not exist or is empty.")
+        if os.path.exists(portfolio_file) and os.path.getsize(portfolio_file) > 0:
+            try:
+                with open(portfolio_file, "r") as file:
+                    portfolio = json.load(file)
+                    for pair, positions in portfolio.items():
+                        print(f"Pair: {pair}")
+                        for position in positions:
+                            print(f"  Position: {position}")
+            except json.JSONDecodeError as e:
+                print(f"Error reading the portfolio file: {e}")
+        else:
+            print("Portfolio file does not exist or is empty.")
 
-def get_balance(self):
-        """Returns the current available balance of the asset."""
-        response = self.bitvavo.balance()
-        for asset in response:
-            if asset["symbol"] == self.pair.split("-")[0]:  # BTC-EUR → BTC
-                return float(asset["available"])
-        return 0.0  # Als asset niet gevonden is, is het saldo 0
+    def get_balance(self):
+            """Returns the current available balance of the asset."""
+            response = self.bitvavo.balance()
+            for asset in response:
+                if asset["symbol"] == self.pair.split("-")[0]:  # BTC-EUR → BTC
+                    return float(asset["available"])
+            return 0.0  # Als asset niet gevonden is, is het saldo 0
 
-def remove_position(self, position):
-        """Removes the position from the portfolio after a failed stoploss."""
-        self.portfolio[self.pair].remove(position)
-        self.log_message(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_slack=True)
+    def remove_position(self, position):
+            """Removes the position from the portfolio after a failed stoploss."""
+            self.portfolio[self.pair].remove(position)
+            self.log_message(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_slack=True)
