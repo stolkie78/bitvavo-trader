@@ -264,6 +264,30 @@ class StateManager:
         Returns:
             bool: True if the sell order succeeded, False otherwise.
         """
+
+        if self.pair not in self.portfolio or not self.portfolio[self.pair]:
+            self.logger.log(
+                f"⚠️ [{self.pair}] Stoploss attempt ignored: No active position found in portfolio.",
+                to_console=True, to_slack=True)
+            return False
+
+        available_balance = TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0])
+        if available_balance < quantity:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ {self.pair}: Not enough balance to sell. Expected {quantity}, available: {available_balance}",
+                to_console=True, to_slack=True
+            )
+            return False
+        
+        # Check of de balans voldoende is voordat je probeert te verkopen
+        if TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0]) < quantity:
+            self.logger.log(
+                f"[{self.bot_name}] ⚠️ {self.pair}: Not enough balance for stoploss, removing position.",
+                to_console=True, to_slack=True
+            )
+            self.remove_position(position)  # Verwijder positie direct
+            return False  # Stop de verkooppoging
+
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(self.pair, quantity)
         if quantity <= 0:
@@ -531,10 +555,17 @@ class StateManager:
             return 0.0  # Als asset niet gevonden is, is het saldo 0
 
     def remove_position(self, position):
-        """Removes the position from the portfolio after a failed stoploss and saves the update."""
-        if self.pair in self.portfolio and position in self.portfolio[self.pair]:
-            self.portfolio[self.pair].remove(position)
-            self.save_portfolio()  # ⬅️ Save the updated portfolio to JSON
-            self.logger.log(f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", to_console=True, to_slack=True)
-        else:
-            self.logger.log(f"⚠️ [{self.pair}] Attempted to remove non-existent position.", to_console=True, to_slack=True)
+        """Removes the position from the portfolio after a failed stoploss."""
+        if self.pair in self.portfolio:
+            try:
+                self.portfolio[self.pair].remove(position)
+                self.logger.log(
+                    f"🔄 [{self.pair}] Removed failed stoploss position from portfolio.", 
+                    to_console=True, to_slack=True
+                )
+                self.save_portfolio()  # Save immediately
+            except ValueError:
+                self.logger.log(
+                    f"⚠️ [{self.pair}] Position not found in portfolio, cannot remove.", 
+                    to_console=True, to_slack=True
+                )
