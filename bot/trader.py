@@ -44,7 +44,26 @@ class TraderBot:
 
     def log_startup(self):
         self.logger.log(f"🚀 TraderBot {self.VERSION} started.", to_console=True, to_slack=True)
-
+        startup_info = {key: self.config.get(key, "N/A") for key in [
+                "PROFILE",
+                "RSI_POINTS",
+                "RSI_INTERVAL",
+                "EMA_POINTS",
+                "EMA_BUY_THRESHOLD",
+                "EMA_SELL_THRESHOLD",
+                "STOP_LOSS_COOLDOWN",
+                "TOTAL_BUDGET",
+                "TRADE_FEE_PERCENTAGE",
+                "MAX_TRADES_PER_PAIR",
+                "STOP_LOSS_PERCENTAGE",
+                "ATR_PERIOD",
+                "ATR_MULTIPLIER",
+                "RISK_PERCENTAGE",
+                "CHECK_INTERVAL"
+            ]}
+    
+        self.logger.log(f"⚙️ Startup Parameters:\n{json.dumps(startup_info, indent=2)}", to_console=True, to_slack=True)
+    
     async def run(self):
         self.logger.log(f"📊 Trading started at {datetime.now()}")
         try:
