@@ -125,6 +125,10 @@ class StateManager:
         return 0.0
 
 
+    
+
+
+
     ############################
     # KOOP FUNCTIONALITEIT
     ############################

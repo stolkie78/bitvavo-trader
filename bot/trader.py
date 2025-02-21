@@ -85,11 +85,15 @@ class TraderBot:
         open_positions = self.state_managers[pair].get_open_positions()
         self.logger.log(f"💎 {pair}[{len(open_positions)}]: Price={current_price:.2f} EUR - RSI={rsi:.2f} - EMA={ema:.2f} - EMA diff: {ema_diff:.4f}")
 
-        if open_positions:
-            await self.handle_stoploss(pair, current_price, open_positions)
-        if self.should_sell(rsi, ema_diff):
+        # ✅ Debug check: Moet de bot handelen?
+        should_buy = self.should_buy(rsi, ema_diff, pair, open_positions)
+        should_sell = self.should_sell(rsi, ema_diff, pair, open_positions)
+
+        self.logger.log(f"DEBUG: should_buy()={should_buy}, should_sell()={should_sell} voor {pair}")
+
+        if should_sell:
             await self.sell_positions(pair, current_price, open_positions)
-        elif self.should_buy(rsi, ema_diff, pair, open_positions):
+        elif should_buy:
             await self.buy_position(pair, current_price)
 
     async def calculate_indicators(self, pair, current_price):
@@ -127,13 +131,56 @@ class TraderBot:
         self.logger.log(f"🟢 {pair}: BUYING Price={current_price:.2f} EUR", to_slack=True)
         await asyncio.to_thread(self.state_managers[pair].buy, current_price, budget, self.config["TRADE_FEE_PERCENTAGE"])
 
-    def should_sell(self, rsi, ema_diff):
-        return rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.config["EMA_SELL_THRESHOLD"]
+    def should_sell(self, rsi, ema_diff, pair, open_positions):
+        """Bepaalt of een verkoop moet plaatsvinden."""
+
+        if not open_positions:
+            self.logger.log(f"🚫 VERKOOP GEBLOKKEERD: Geen open posities voor {pair}.", to_console=True)
+            return False
+
+        sell_signal = rsi >= self.config["RSI_SELL_THRESHOLD"] and ema_diff <= self.config["EMA_SELL_THRESHOLD"]
+        self.logger.log(f"DEBUG: should_sell() check voor {pair} - RSI={rsi}, EMA Diff={ema_diff}, Sell Signal={sell_signal}")
+
+        return sell_signal
 
     def should_buy(self, rsi, ema_diff, pair, open_positions):
         last_sl_time = self.last_stoploss_time.get(pair)
         cooldown_active = last_sl_time and (time.time() - last_sl_time) < self.stoploss_cooldown
-        return not cooldown_active and len(open_positions) < self.config.get("MAX_TRADES_PER_PAIR", 1) and rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.config["EMA_BUY_THRESHOLD"]
+        max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
+
+        if cooldown_active:
+            self.logger.log(f"⏳ KOOP GEBLOKKEERD: Stop-loss cooldown actief voor {pair}.", to_console=True)
+            return False
+
+        if len(open_positions) >= max_trades:
+            self.logger.log(f"⚠️ KOOP GEBLOKKEERD: Maximaal aantal open trades ({max_trades}) bereikt voor {pair}.", to_console=True)
+            return False
+
+        buy_signal = rsi <= self.config["RSI_BUY_THRESHOLD"] and ema_diff >= self.config["EMA_BUY_THRESHOLD"]
+
+        self.logger.log(f"DEBUG: should_buy() check voor {pair} - RSI={rsi}, EMA Diff={ema_diff}, Buy Signal={buy_signal}")
+
+        return buy_signal
+    
+    def should_trade(self, price, rsi, ema, ema_diff, rsi_buy_threshold=30, rsi_sell_threshold=70):
+        """
+        Controleert of een trade moet worden uitgevoerd en logt de reden waarom niet.
+
+        Returns:
+            tuple: (bool, str) - True als er een trade moet worden uitgevoerd, anders False met een reden.
+        """
+        if rsi < rsi_buy_threshold and ema_diff < 0:
+            self.logger.log(f"🔵 KOOPSIGNAAL: {self.pair} - Prijs: {price}, RSI: {rsi}, EMA: {ema}, EMA Diff: {ema_diff}")
+            return (True, "TRADE")  # ✅ Fix: Zorg ervoor dat altijd een tuple wordt geretourneerd.
+
+        if rsi > rsi_sell_threshold and ema_diff > 0:
+            self.logger.log(f"🔴 VERKOOPSIGNAAL: {self.pair} - Prijs: {price}, RSI: {rsi}, EMA: {ema}, EMA Diff: {ema_diff}")
+            return (True, "TRADE")  # ✅ Fix: Ook hier een tuple
+
+        reason = "RSI of EMA-diff voldoet niet aan de koop/verkoopcriteria"
+        self.logger.log(f"🚫 Geen trade voor {self.pair} - RSI: {rsi} (Buy: <{rsi_buy_threshold}, Sell: >{rsi_sell_threshold}), EMA Diff: {ema_diff}")
+        return (False, reason)  # ✅ Fix: Retourneer altijd een tuple
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Async Trader bot")
