@@ -109,232 +109,7 @@ class StateManager:
             to_console=True
         )
         return quantity
-
-    def buy(self, price, budget, fee_percentage):
-        """
-        Execute a buy order and add a new position for the pair.
-        Performs a budget check before placing the order.
-
-        Args:
-            price (float): The purchase price.
-            budget (float): The budget allocated for the purchase.
-            fee_percentage (float): The transaction fee in percent.
-        """
-        try:
-            available_balance = TradingUtils.get_account_balance(
-                self.bitvavo, asset="EUR")
-        except Exception as e:
-            error_msg = f"[{self.bot_name}] ❌ Error retrieving account balance: {e}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        if available_balance < budget:
-            error_msg = (
-                f"[{self.bot_name}] {self.pair}: ❌ Insufficient funds"
-                f"Required: {budget:.2f} EUR, available: {available_balance:.2f} EUR"
-            )
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        # The fee is applied on the quantity: we buy less crypto than the full budget allows.
-        quantity = (budget / price) * (1 - fee_percentage / 100)
-        quantity = self.adjust_quantity(self.pair, quantity)
-
-        if quantity <= 0:
-            error_msg = f"[{self.bot_name}] {self.pair}: ❌ Invalid quantity {quantity}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
-        )
-
-        if order.get("status") == "demo" or "orderId" in order:
-            # Store the actual budget spent as the cost basis (includes buy fee)
-            new_position = {
-                "price": price,
-                "quantity": quantity,
-                "spent": budget,
-                "timestamp": datetime.now().isoformat()
-            }
-            if self.pair not in self.portfolio:
-                self.portfolio[self.pair] = []
-            elif not isinstance(self.portfolio[self.pair], list):
-                self.portfolio[self.pair] = [self.portfolio[self.pair]]
-            self.portfolio[self.pair].append(new_position)
-            self.save_portfolio()
-            self.log_trade("buy", price, quantity)
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: 👽 Bought Price={price:.2f}, Quantity={quantity:.6f}",
-                to_console=True, to_slack=False
-            )
-        else:
-            error_msg = f"[{self.bot_name}] ❌ {self.pair}: Failed to execute buy order {order}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-
-    def sell(self, price, fee_percentage):
-        """
-        Execute a sell order for all open positions and remove them from the portfolio.
-        For multiple positions it is recommended to use sell_position() for individual trades.
-        
-        Args:
-            price (float): The sell price.
-            fee_percentage (float): The transaction fee in percent.
-        """
-        open_positions = self.get_open_positions()
-        if not open_positions:
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: 👽 No position to sell.", to_console=True)
-            return
-
-        for position in list(open_positions):
-            self.sell_position(position, price, fee_percentage)
-
-    def sell_position(self, position, price, fee_percentage):
-        """
-        Execute a sell order for a specific position and remove it from the portfolio.
-        If possible, retrieve actual order details to calculate the true profit.
-
-        Args:
-            position (dict): The position to sell.
-            price (float): The sell price.
-            fee_percentage (float): The transaction fee in percent.
-        """
-        open_positions = self.get_open_positions()
-        if position not in open_positions:
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: 👽 No matching position to sell", to_console=True)
-            return
-
-        quantity = position.get("quantity", 0)
-        quantity = self.adjust_quantity(self.pair, quantity)
-        if quantity <= 0:
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: ❌ Invalid quantity {quantity}", to_console=True, to_slack=True)
-            return
-
-        # Add spent column with real buy amount
-        cost_basis = position.get("spent", position["price"] * quantity)
-        revenue = price * quantity * (1 - fee_percentage / 100)
-        estimated_profit = revenue - cost_basis
-
-        order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
-        )
-
-        if order.get("status") == "demo" or "orderId" in order:
-            order_id = order.get("orderId")
-            actual_profit = None
-            if order_id:
-                actual_profit = self.get_actual_trade_profit(
-                    order_id, position, fee_percentage)
-            profit_to_log = actual_profit if actual_profit is not None else estimated_profit
-
-            self.log_trade("sell", price, quantity, profit=profit_to_log)
-            if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
-                try:
-                    self.portfolio[self.pair].remove(position)
-                except ValueError:
-                    self.logger.log(
-                        f"[{self.bot_name}] {self.pair}: ❌ Position not found in portfolio.",
-                        to_console=True
-                    )
-            self.save_portfolio()
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: 👽 Sold: Price={price:.2f}, Profit={profit_to_log:.2f}",
-                to_console=True, to_slack=False
-            )
-        else:
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: ❌ Failed to execute sell order {order}",
-                to_console=True, to_slack=True
-            )
-
-    def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
-        """
-        Execute a stop loss sell order for a specific position with a retry mechanism.
-
-        Args:
-            position (dict): The position to sell.
-            current_price (float): The current market price triggering the stop loss.
-            fee_percentage (float): The trading fee percentage.
-            max_retries (int): Maximum number of retries.
-            wait_time (int): Time in seconds to wait between retries.
-
-        Returns:
-            bool: True if the sell order succeeded, False otherwise.
-        """
-
-        if self.pair not in self.portfolio or not self.portfolio[self.pair]:
-            self.logger.log(
-                f"⚠️ [{self.pair}] Stoploss attempt ignored: No active position found in portfolio.",
-                to_console=True, to_slack=True)
-            return False
-
-        available_balance = TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0])
-        if available_balance < quantity:
-            self.logger.log(
-                f"[{self.bot_name}] ❌ {self.pair}: Not enough balance to sell. Expected {quantity}, available: {available_balance}",
-                to_console=True, to_slack=True
-            )
-            return False
-        
-        # Check of de balans voldoende is voordat je probeert te verkopen
-        if TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0]) < quantity:
-            self.logger.log(
-                f"[{self.bot_name}] ⚠️ {self.pair}: Not enough balance for stoploss, removing position.",
-                to_console=True, to_slack=True
-            )
-            self.remove_position(position)  # Verwijder positie direct
-            return False  # Stop de verkooppoging
-
-        quantity = position.get("quantity", 0)
-        quantity = self.adjust_quantity(self.pair, quantity)
-        if quantity <= 0:
-            self.logger.log(
-                f"[{self.bot_name}] {self.pair}: ❌ Invalid quantity StopLoss sell: {quantity}",
-                to_console=True, to_slack=True
-            )
-            return False
-
-        cost_basis = position.get("spent", position["price"] * quantity)
-        for attempt in range(1, max_retries + 1):
-            revenue = current_price * quantity * (1 - fee_percentage / 100)
-            profit = revenue - cost_basis
-            self.logger.log(
-                f"[{self.bot_name}] ⛔️ {self.pair}: Stoploss attempt {attempt}: Trying to sell at {current_price:.2f} (Profit: {profit:.2f})",
-                to_console=True
-            )
-
-            order = TradingUtils.place_order(
-                self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
-            )
-            if order.get("status") == "demo" or "orderId" in order:
-                self.log_trade("sell", current_price, quantity, profit)
-                if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
-                    try:
-                        self.portfolio[self.pair].remove(position)
-                    except ValueError:
-                        self.logger.log(
-                            f"[{self.bot_name}] ❌ Position not found in portfolio for {self.pair}.",
-                            to_console=True
-                        )
-                self.save_portfolio()
-                self.logger.log(
-                    f"[{self.bot_name}] 👽 {self.pair}: Stoploss sold  Price={current_price:.2f}, Profit={profit:.2f}",
-                    to_console=True, to_slack=False
-                )
-                return True
-            else:
-                self.logger.log(
-                    f"[{self.bot_name}] 👽 {self.pair}: Stoploss sell attempt {attempt} failed for {order}",
-                    to_console=True
-                )
-                time.sleep(wait_time)
-        self.logger.log(f"[{self.bot_name}] ❌ Stop loss sell failed for {self.pair} after {max_retries} attempts.",
-                        to_console=True)
-        return False
-
+    
     def calculate_profit(self, current_price, fee_percentage):
         """
         Calculate aggregated profit or loss for all open positions.
@@ -454,95 +229,24 @@ class StateManager:
                 to_console=True
             )
             return None
-
-
-    def buy_dynamic(self, price, quantity, fee_percentage):
-        """
-        Voert een kooporder uit met de dynamisch berekende quantity.
-
-        Args:
-            price (float): De huidige prijs.
-            quantity (float): De berekende hoeveelheid.
-            fee_percentage (float): Het handelskostenpercentage.
-        """
-        try:
-            available_balance = TradingUtils.get_account_balance(
-                self.bitvavo, asset="EUR")
-        except Exception as e:
-            self.logger.log(
-                f"[{self.bot_name}] ❌ Error retrieving account balance: {e}",
-                to_console=True,
-                to_slack=True
-            )
-            return
-
-        if available_balance < price * quantity:
-            self.logger.log(
-                f"[{self.bot_name}] ❌ {self.pair}: Insufficient funds. Needed: {price * quantity:.2f} EUR, Available: {available_balance:.2f} EUR",
-                to_console=True,
-                to_slack=True
-            )
-            return
-
-        # Pas de quantity aan conform de markteisen
-        quantity = self.adjust_quantity(self.pair, quantity)
-        if quantity <= 0:
-            self.logger.log(
-                f"[{self.bot_name}] ❌ Invalid quantity {self.pair}: {quantity}",
-                to_console=True,
-                to_slack=True
-            )
-            return
-
-        order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode)
-
-        if order.get("status") == "demo" or "orderId" in order:
-            new_position = {
-                "price": price,
-                "quantity": quantity,
-                "spent": price * quantity,
-                "timestamp": datetime.now().isoformat()
-            }
-            if self.pair not in self.portfolio:
-                self.portfolio[self.pair] = []
-            elif not isinstance(self.portfolio[self.pair], list):
-                self.portfolio[self.pair] = [self.portfolio[self.pair]]
-            self.portfolio[self.pair].append(new_position)
-            self.save_portfolio()
-            self.log_trade("buy", price, quantity)
-            self.logger.log(
-                f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
-                to_console=True,
-                to_slack=False
-            )
-        else:
-            self.logger.log(
-                f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}",
-                to_console=True,
-                to_slack=True
-            )
-
+        
     def get_price_history(self):
         """
         Haal de laatste prijs geschiedenis op van de markt.
         """
         return self.price_history if hasattr(self, "price_history") else []
 
+    @staticmethod
     def show_all_open_positions():
         data_dir = "data"
         portfolio_file = os.path.join(data_dir, "portfolio.json")
-
         if os.path.exists(portfolio_file) and os.path.getsize(portfolio_file) > 0:
-            try:
-                with open(portfolio_file, "r") as file:
-                    portfolio = json.load(file)
-                    for pair, positions in portfolio.items():
-                        print(f"Pair: {pair}")
-                        for position in positions:
-                            print(f"  Position: {position}")
-            except json.JSONDecodeError as e:
-                print(f"Error reading the portfolio file: {e}")
+            with open(portfolio_file, "r") as file:
+                portfolio = json.load(file)
+                for pair, positions in portfolio.items():
+                    print(f"Pair: {pair}")
+                    for position in positions:
+                        print(f"  Position: {position}")
         else:
             print("Portfolio file does not exist or is empty.")
 
@@ -569,3 +273,215 @@ class StateManager:
                     f"⚠️ [{self.pair}] Position not found in portfolio, cannot remove.", 
                     to_console=True, to_slack=True
                 )
+
+######################
+# BUY Logic
+######################
+    def buy(self, price, budget, fee_percentage):
+        """
+        Voert een kooporder uit op basis van een budget.
+
+        Args:
+            price (float): De koopprijs per eenheid.
+            budget (float): Het beschikbare budget in EUR.
+            fee_percentage (float): Het handelskostenpercentage.
+        """
+        if budget <= 0:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Invalid budget provided: {budget}",
+                to_console=True, to_slack=True
+            )
+            return
+
+        quantity = (budget / price) * (1 - fee_percentage / 100)
+        self._execute_buy(price, quantity, fee_percentage)
+
+
+    def buy_dynamic(self, price, quantity, fee_percentage):
+        """
+        Voert een kooporder uit op basis van een opgegeven hoeveelheid.
+
+        Args:
+            price (float): De koopprijs per eenheid.
+            quantity (float): De hoeveelheid die gekocht moet worden.
+            fee_percentage (float): Het handelskostenpercentage.
+        """
+        if quantity <= 0:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Invalid quantity provided: {quantity}",
+                to_console=True, to_slack=True
+            )
+            return
+
+        self._execute_buy(price, quantity, fee_percentage)
+
+
+    def _execute_buy(self, price, quantity, fee_percentage):
+        """
+        Interne functie die de daadwerkelijke kooptransactie uitvoert.
+
+        Args:
+            price (float): De koopprijs per eenheid.
+            quantity (float): De hoeveelheid die gekocht moet worden.
+            fee_percentage (float): Het handelskostenpercentage.
+        """
+        try:
+            available_balance = TradingUtils.get_account_balance(self.bitvavo, asset="EUR")
+        except Exception as e:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Error retrieving account balance: {e}",
+                to_console=True, to_slack=True
+            )
+            return
+
+        total_cost = price * quantity
+        if available_balance < total_cost:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ {self.pair}: Insufficient funds."
+                f" Needed: {total_cost:.2f} EUR, Available: {available_balance:.2f} EUR",
+                to_console=True, to_slack=True
+            )
+            return
+
+        # Pas de quantity aan conform de markteisen
+        quantity = self.adjust_quantity(self.pair, quantity)
+        if quantity <= 0:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ Invalid quantity for {self.pair}: {quantity}",
+                to_console=True, to_slack=True
+            )
+            return
+
+        order = TradingUtils.place_order(
+            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
+        )
+
+        if order.get("status") == "demo" or "orderId" in order:
+            spent = price * quantity * (1 + fee_percentage / 100)
+
+            new_position = {
+                "price": price,
+                "quantity": quantity,
+                "spent": spent,
+                "timestamp": datetime.now().isoformat()
+            }
+
+            if self.pair not in self.portfolio:
+                self.portfolio[self.pair] = []
+            elif not isinstance(self.portfolio[self.pair], list):
+                self.portfolio[self.pair] = [self.portfolio[self.pair]]
+            self.portfolio[self.pair].append(new_position)
+
+            self.save_portfolio()
+            self.log_trade("buy", price, quantity)
+            self.logger.log(
+                f"[{self.bot_name}] {self.pair}: 👽 Bought Price={price:.2f}, Quantity={quantity:.6f}",
+                to_console=True, to_slack=False
+            )
+        else:
+            self.logger.log(
+                f"[{self.bot_name}] ❌ {self.pair}: Failed to execute buy order {order}",
+                to_console=True, to_slack=True
+            )
+
+#################           
+# SELL Logic
+#################
+def sell(self, price, fee_percentage, max_retries=3, wait_time=5, is_stoploss=False):
+    """
+    Verkoop alle open posities met retry-mechanisme.
+
+    Args:
+        price (float): De verkoopprijs.
+        fee_percentage (float): De transactiekosten in procenten.
+        max_retries (int): Aantal retries bij een mislukte verkoop.
+        wait_time (int): Tijd in seconden tussen retries.
+        is_stoploss (bool): True als het om een stoploss gaat (snellere actie vereist).
+    """
+    open_positions = self.get_open_positions()
+    if not open_positions:
+        self.logger.log(
+            f"[{self.bot_name}] {self.pair}: 👽 No position to sell.", to_console=True
+        )
+        return
+
+    for position in list(open_positions):
+        self._execute_sell(position, price, fee_percentage, max_retries, wait_time, is_stoploss)
+
+
+def _execute_sell(self, position, price, fee_percentage, max_retries, wait_time, is_stoploss):
+    """
+    Voert een verkoop uit met optioneel retry-mechanisme.
+
+    Args:
+        position (dict): De positie die verkocht moet worden.
+        price (float): De verkoopprijs.
+        fee_percentage (float): De transactiekosten in procenten.
+        max_retries (int): Aantal retries bij een mislukte verkoop.
+        wait_time (int): Tijd in seconden tussen retries.
+        is_stoploss (bool): True als het om een stoploss-verkoop gaat.
+
+    Returns:
+        bool: True als de verkoop slaagt, anders False.
+    """
+    quantity = position.get("quantity", 0)
+    quantity = self.adjust_quantity(self.pair, quantity)
+    if quantity <= 0:
+        self.logger.log(
+            f"[{self.bot_name}] {self.pair}: ❌ Invalid quantity sell: {quantity}",
+            to_console=True, to_slack=True
+        )
+        return False
+
+    available_balance = TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0])
+    if available_balance < quantity:
+        self.logger.log(
+            f"[{self.bot_name}] ❌ {self.pair}: Not enough balance to sell. Expected {quantity}, available: {available_balance}",
+            to_console=True, to_slack=True
+        )
+        return False
+
+    if is_stoploss:
+        self.logger.log(
+            f"[{self.bot_name}] ⚠️ {self.pair}: Stoploss triggered, selling immediately!",
+            to_console=True, to_slack=True
+        )
+
+    cost_basis = position.get("spent", position["price"] * quantity)
+    for attempt in range(1, max_retries + 1):
+        revenue = price * quantity * (1 - fee_percentage / 100)
+        profit = revenue - cost_basis
+        self.logger.log(
+            f"[{self.bot_name}] ⛔️ {self.pair}: Sell attempt {attempt}: Price={price:.2f} (Profit: {profit:.2f})",
+            to_console=True
+        )
+
+        order = TradingUtils.place_order(
+            self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
+        )
+        if order.get("status") == "demo" or "orderId" in order:
+            self.log_trade("sell", price, quantity, profit)
+            if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
+                try:
+                    self.portfolio[self.pair].remove(position)
+                except ValueError:
+                    self.logger.log(
+                        f"[{self.bot_name}] ❌ Position not found in portfolio for {self.pair}.",
+                        to_console=True
+                    )
+            self.save_portfolio()
+            self.logger.log(
+                f"[{self.bot_name}] 👽 {self.pair}: Sold! Price={price:.2f}, Profit={profit:.2f}",
+                to_console=True, to_slack=False
+            )
+            return True
+        else:
+            self.logger.log(
+                f"[{self.bot_name}] 👽 {self.pair}: Sell attempt {attempt} failed for {order}",
+                to_console=True
+            )
+            time.sleep(wait_time)
+
+    self.logger.log(f"[{self.bot_name}] ❌ Sell failed for {self.pair} after {max_retries} attempts.",
+                    to_console=True)
+    return False
