@@ -254,24 +254,19 @@ class StateManager:
     def sell_position_with_retry(self, position, current_price, fee_percentage, max_retries=3, wait_time=5):
         """
         Voert een stoploss verkoop uit met retry-mechanisme.
-    
-        Args:
-            position (dict): De positie die verkocht moet worden.
-            current_price (float): De huidige marktprijs.
-            fee_percentage (float): De handelskosten in procenten.
-            max_retries (int): Maximum aantal pogingen.
-            wait_time (int): Wachttijd tussen pogingen in seconden.
-    
-        Returns:
-            bool: True als de verkoop is gelukt, anders False.
         """
-        if self.pair not in self.portfolio or not self.portfolio[self.pair]:
+        # ✅ Forceer een herladen van de portfolio
+        self.portfolio = self.load_portfolio()
+    
+        # ✅ Check of de positie nog actief is
+        open_positions = self.get_open_positions()
+        if position not in open_positions:
             self.logger.log(
-                f"⚠️ [{self.pair}] Stoploss genegeerd: Geen actieve posities.",
-                to_console=True, to_slack=True)
+                f"⚠️ [{self.pair}] Stoploss geannuleerd: Positie al verkocht.",
+                to_console=True, to_slack=True
+            )
             return False
     
-        # ✅ Fix: Haal eerst de hoeveelheid op
         quantity = position.get("quantity", 0)
         quantity = self.adjust_quantity(self.pair, quantity)
         
@@ -282,7 +277,6 @@ class StateManager:
             )
             return False
     
-        # ✅ Fix: Haal het beschikbare saldo pas op NA het ophalen van quantity
         available_balance = TradingUtils.get_account_balance(self.bitvavo, asset=self.pair.split("-")[0])
         
         if available_balance < quantity:
@@ -308,6 +302,9 @@ class StateManager:
             )
             if order.get("status") == "demo" or "orderId" in order:
                 self.log_trade("sell", current_price, quantity, profit)
+                
+                # ✅ Forceer verwijderen van de positie uit de portfolio na verkoop
+                self.portfolio = self.load_portfolio()
                 if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                     try:
                         self.portfolio[self.pair].remove(position)
@@ -317,6 +314,7 @@ class StateManager:
                             to_console=True
                         )
                 self.save_portfolio()
+    
                 self.logger.log(
                     f"[{self.bot_name}] ✅ {self.pair}: Stoploss verkocht | Prijs={current_price:.2f}, Winst={profit:.2f}",
                     to_console=True, to_slack=False
@@ -332,6 +330,7 @@ class StateManager:
         self.logger.log(f"[{self.bot_name}] ❌ Stoploss verkoop mislukt voor {self.pair} na {max_retries} pogingen.",
                         to_console=True)
         return False
+
 
 
     def calculate_profit(self, current_price, fee_percentage):
