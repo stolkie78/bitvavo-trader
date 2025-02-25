@@ -110,68 +110,6 @@ class StateManager:
         )
         return quantity
 
-    def buy(self, price, budget, fee_percentage):
-        """
-        Execute a buy order and add a new position for the pair.
-        Performs a budget check before placing the order.
-
-        Args:
-            price (float): The purchase price.
-            budget (float): The budget allocated for the purchase.
-            fee_percentage (float): The transaction fee in percent.
-        """
-        try:
-            available_balance = TradingUtils.get_account_balance(
-                self.bitvavo, asset="EUR")
-        except Exception as e:
-            error_msg = f"[{self.bot_name}] ❌ Error retrieving account balance: {e}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        if available_balance < budget:
-            error_msg = (
-                f"[{self.bot_name}] ❌ Insufficient funds to buy {self.pair}. "
-                f"Required: {budget:.2f} EUR, available: {available_balance:.2f} EUR"
-            )
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        # The fee is applied on the quantity: we buy less crypto than the full budget allows.
-        quantity = (budget / price) * (1 - fee_percentage / 100)
-        quantity = self.adjust_quantity(self.pair, quantity)
-
-        if quantity <= 0:
-            error_msg = f"[{self.bot_name}] ❌ Invalid quantity for {self.pair}: {quantity}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-            return
-
-        order = TradingUtils.place_order(
-            self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
-        )
-
-        if order.get("status") == "demo" or "orderId" in order:
-            # Store the actual budget spent as the cost basis (includes buy fee)
-            new_position = {
-                "price": price,
-                "quantity": quantity,
-                "spent": budget,
-                "timestamp": datetime.now().isoformat()
-            }
-            if self.pair not in self.portfolio:
-                self.portfolio[self.pair] = []
-            elif not isinstance(self.portfolio[self.pair], list):
-                self.portfolio[self.pair] = [self.portfolio[self.pair]]
-            self.portfolio[self.pair].append(new_position)
-            self.save_portfolio()
-            self.log_trade("buy", price, quantity)
-            self.logger.log(
-                f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
-                to_console=True, to_slack=True
-            )
-        else:
-            error_msg = f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}"
-            self.logger.log(error_msg, to_console=True, to_slack=True)
-
     def calculate_profit(self, current_price, fee_percentage):
         """
         Calculate aggregated profit or loss for all open positions.
@@ -291,13 +229,16 @@ class StateManager:
                 to_console=True
             )
             return None
-
+        
+###########################################
+# BUY / SELL
+###########################################
 
     def sell_position(self, price, fee_percentage, stop_loss=False, max_retries=3, wait_time=5):
         """
         Execute a sell order for all open positions or a specific position.
         If stop_loss is True, it will retry if the sell order fails.
-    
+
         Args:
             price (float): The sell price.
             fee_percentage (float): The transaction fee in percent.
@@ -311,7 +252,7 @@ class StateManager:
                 f"[{self.bot_name}] 👽 No position to sell for {self.pair}.", to_console=True
             )
             return
-    
+
         for position in list(open_positions):
             quantity = position.get("quantity", 0)
             quantity = self.adjust_quantity(self.pair, quantity)
@@ -320,11 +261,11 @@ class StateManager:
                     f"[{self.bot_name}] 👽 Invalid quantity for {self.pair}: {quantity}", to_console=True, to_slack=True
                 )
                 continue
-            
+
             cost_basis = position.get("spent", position["price"] * quantity)
             revenue = price * quantity * (1 - fee_percentage / 100)
             estimated_profit = revenue - cost_basis
-    
+
             attempt = 0
             while attempt < (max_retries if stop_loss else 1):
                 attempt += 1
@@ -333,11 +274,11 @@ class StateManager:
                         f"[{self.bot_name}] ⛔️ Stop loss attempt {attempt} for {self.pair}: Trying to sell at {price:.2f}",
                         to_console=True
                     )
-    
+
                 order = TradingUtils.place_order(
                     self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
                 )
-    
+
                 if order.get("status") == "demo" or "orderId" in order:
                     order_id = order.get("orderId")
                     actual_profit = None
@@ -345,10 +286,10 @@ class StateManager:
                         actual_profit = self.get_actual_trade_profit(
                             order_id, position, fee_percentage
                         )
-    
+
                     profit_to_log = actual_profit if actual_profit is not None else estimated_profit
                     self.log_trade("sell", price, quantity, profit=profit_to_log)
-    
+
                     # Remove sold position from portfolio
                     if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
                         try:
@@ -359,7 +300,7 @@ class StateManager:
                                 to_console=True
                             )
                     self.save_portfolio()
-    
+
                     self.logger.log(
                         f"[{self.bot_name}] 👽 Sold {self.pair}: Price={price:.2f}, Profit={profit_to_log:.2f}",
                         to_console=True, to_slack=False
@@ -371,3 +312,65 @@ class StateManager:
                         to_console=True, to_slack=True
                     )
                     time.sleep(wait_time)
+
+    def buy(self, price, budget, fee_percentage):
+            """
+            Execute a buy order and add a new position for the pair.
+            Performs a budget check before placing the order.
+
+            Args:
+                price (float): The purchase price.
+                budget (float): The budget allocated for the purchase.
+                fee_percentage (float): The transaction fee in percent.
+            """
+            try:
+                available_balance = TradingUtils.get_account_balance(
+                    self.bitvavo, asset="EUR")
+            except Exception as e:
+                error_msg = f"[{self.bot_name}] ❌ Error retrieving account balance: {e}"
+                self.logger.log(error_msg, to_console=True, to_slack=True)
+                return
+
+            if available_balance < budget:
+                error_msg = (
+                    f"[{self.bot_name}] ❌ Insufficient funds to buy {self.pair}. "
+                    f"Required: {budget:.2f} EUR, available: {available_balance:.2f} EUR"
+                )
+                self.logger.log(error_msg, to_console=True, to_slack=True)
+                return
+
+            # The fee is applied on the quantity: we buy less crypto than the full budget allows.
+            quantity = (budget / price) * (1 - fee_percentage / 100)
+            quantity = self.adjust_quantity(self.pair, quantity)
+
+            if quantity <= 0:
+                error_msg = f"[{self.bot_name}] ❌ Invalid quantity for {self.pair}: {quantity}"
+                self.logger.log(error_msg, to_console=True, to_slack=True)
+                return
+
+            order = TradingUtils.place_order(
+                self.bitvavo, self.pair, "buy", quantity, demo_mode=self.demo_mode
+            )
+
+            if order.get("status") == "demo" or "orderId" in order:
+                # Store the actual budget spent as the cost basis (includes buy fee)
+                new_position = {
+                    "price": price,
+                    "quantity": quantity,
+                    "spent": budget,
+                    "timestamp": datetime.now().isoformat()
+                }
+                if self.pair not in self.portfolio:
+                    self.portfolio[self.pair] = []
+                elif not isinstance(self.portfolio[self.pair], list):
+                    self.portfolio[self.pair] = [self.portfolio[self.pair]]
+                self.portfolio[self.pair].append(new_position)
+                self.save_portfolio()
+                self.log_trade("buy", price, quantity)
+                self.logger.log(
+                    f"[{self.bot_name}] 👽 Bought {self.pair}: Price={price:.2f}, Quantity={quantity:.6f}",
+                    to_console=True, to_slack=True
+                )
+            else:
+                error_msg = f"[{self.bot_name}] 👽 Failed to execute buy order for {self.pair}: {order}"
+                self.logger.log(error_msg, to_console=True, to_slack=True)

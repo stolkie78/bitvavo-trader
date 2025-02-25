@@ -32,13 +32,8 @@ class Trader:
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
-
-        # Haal de nieuwe RSI-opties uit de config (in uppercase) met fallback-waarden.
         self.rsi_points = config.get("RSI_POINTS", 14)  # aantal RSI punten
-        # RSI_INTERVAL is het candle-interval. Omdat de API meestal lowercase verwacht, converteren we deze:
         self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
-
-        # Pre-populeer de prijsgeschiedenis per trading pair met historische data
         self.price_history = {}
         for pair in config["PAIRS"]:
             try:
@@ -60,7 +55,7 @@ class Trader:
 
         self.pair_budgets = {
             pair: (self.config["TOTAL_BUDGET"] *
-                   self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
+                self.config["PORTFOLIO_ALLOCATION"][pair] / 100)
             for pair in self.config["PAIRS"]
         }
 
