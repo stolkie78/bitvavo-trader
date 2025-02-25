@@ -177,3 +177,4 @@ log/
 botname.txt
 .flox
 bitvavo.env
+.DS_Store
