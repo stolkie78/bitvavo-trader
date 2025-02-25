@@ -12,7 +12,7 @@ import argparse
 import json
 
 
-class ScalpingBot:
+class Trader:
     """
     Async Scalping bot
     """
@@ -28,7 +28,7 @@ class ScalpingBot:
         self.bitvavo = bitvavo
         self.args = args
 
-        self.bot_name = config.get("PROFILE", "SCALPINGBOT")
+        self.bot_name = config.get("PROFILE", "TRADER")
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
@@ -94,7 +94,7 @@ class ScalpingBot:
         startup_info = {
             **self.config
         }
-        self.log_message("🚀 Starting ScalpingBot", to_slack=True)
+        self.log_message("🚀 Starting Trader", to_slack=True)
         self.log_message(
             f"⚠️ Startup Info: {json.dumps(startup_info, indent=2)}", to_slack=True)
 
@@ -159,7 +159,7 @@ class ScalpingBot:
                             f"💎 Current price for {pair}: {price_str} EUR, RSI={rsi:.2f}")
 
                         # Sell Logic
-                        if rsi >= self.config["SELL_THRESHOLD"]:
+                        if rsi >= self.config["RSI_SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
@@ -185,7 +185,7 @@ class ScalpingBot:
                                         )
 
                         # Buy Logic
-                        elif rsi <= self.config["BUY_THRESHOLD"]:
+                        elif rsi <= self.config["RSI_BUY_THRESHOLD"]:
                             max_trades = self.config.get(
                                 "MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
@@ -208,22 +208,22 @@ class ScalpingBot:
 
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
         except KeyboardInterrupt:
-            self.log_message("🛑 ScalpingBot stopped by user.", to_slack=True)
+            self.log_message("🛑 Trader stopped by user.", to_slack=True)
         finally:
-            self.log_message("✅ ScalpingBot finished trading.", to_slack=True)
+            self.log_message("✅ Trader finished trading.", to_slack=True)
 
 
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Asynchroon ScalpingBot met dynamische configuratie, multi-trade ondersteuning en historische data voor directe RSI-berekening."
+        description="Asynchroon Trader met dynamische configuratie, multi-trade ondersteuning en historische data voor directe RSI-berekening."
     )
     parser.add_argument(
         "--config",
         type=str,
-        default="scalper.json",
-        help="Pad naar het JSON-configuratiebestand (default: scalper.json)"
+        default="trader.json",
+        help="Pad naar het JSON-configuratiebestand (default: trader.json)"
     )
     args = parser.parse_args()
 
@@ -243,10 +243,10 @@ if __name__ == "__main__":
             logger,
             bitvavo_instance,
             demo_mode=config.get("DEMO_MODE", False),
-            bot_name=config.get("PROFILE", "SCALPINGBOT")
+            bot_name=config.get("PROFILE", "TRADER")
         )
         for pair in config["PAIRS"]
     }
 
-    bot = ScalpingBot(config, logger, state_managers, bitvavo_instance, args)
+    bot = Trader(config, logger, state_managers, bitvavo_instance, args)
     asyncio.run(bot.run())
