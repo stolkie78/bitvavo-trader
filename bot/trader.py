@@ -16,7 +16,7 @@ class Trader:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.30"
+    VERSION = "0.1.31"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -138,13 +138,12 @@ class Trader:
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
-                                    self.state_managers[pair].sell_position_with_retry,
-                                    position,
+                                    self.state_managers[pair].sell_position,
                                     current_price,
                                     self.config["TRADE_FEE_PERCENTAGE"],
-                                    self.config.get(
-                                        "STOP_LOSS_MAX_RETRIES", 3),
-                                    self.config.get("STOP_LOSS_WAIT_TIME", 5)
+                                    stop_loss=True,
+                                    max_retries=self.config.get("STOP_LOSS_MAX_RETRIES", 3),
+                                    wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
                     # Start RSI calculations
@@ -174,9 +173,9 @@ class Trader:
                                         )
                                         await asyncio.to_thread(
                                             self.state_managers[pair].sell_position,
-                                            pos,
                                             current_price,
-                                            self.config["TRADE_FEE_PERCENTAGE"]
+                                            self.config["TRADE_FEE_PERCENTAGE"],
+                                            stop_loss=False
                                         )
                                     else:
                                         self.log_message(
