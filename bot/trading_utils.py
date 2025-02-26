@@ -163,7 +163,7 @@ class TradingUtils:
         """
         for attempt in range(1, retries + 1):
             try:
-                order_details = bitvavo.gerOrder(order_id)
+                order_details = bitvavo.getOrder(order_id)
                 if isinstance(order_details, str):
                     order_details = json.loads(order_details)
                 if "orderId" in order_details:
