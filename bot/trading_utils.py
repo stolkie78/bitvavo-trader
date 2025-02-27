@@ -150,11 +150,12 @@ class TradingUtils:
                 time.sleep(delay)
 
     @staticmethod
-    def get_order_details(bitvavo, order_id, retries=3, delay=2):
+    def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
         """
         Retrieves the order details via the Bitvavo API.
-        
+
         :param bitvavo: Configured Bitvavo API client.
+        :param market: Trading pair, e.g. "LTC-EUR".
         :param order_id: The order ID for which the details need to be retrieved.
         :param retries: Number of attempts before throwing an error (default: 3).
         :param delay: Delay in seconds between attempts (default: 2).
@@ -163,12 +164,12 @@ class TradingUtils:
         """
         for attempt in range(1, retries + 1):
             try:
-                order_details = bitvavo.getOrder(order_id)
+                order_details = bitvavo.getOrder(market, order_id)
                 if isinstance(order_details, str):
                     order_details = json.loads(order_details)
                 if "orderId" in order_details:
                     logging.debug("Fetched order details for %s: %s",
-                                order_id, order_details)
+                                  order_id, order_details)
                     return order_details
                 else:
                     raise ValueError(
