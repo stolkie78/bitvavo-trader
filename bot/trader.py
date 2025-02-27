@@ -76,7 +76,7 @@ class Trader:
                     return portfolio
             except Exception as e:
                 self.logger.log(
-                    f"👽❌ Error loading portfolio: {e}", to_console=True)
+                    f"❌ Error loading portfolio: {e}", to_console=True)
         return {}
 
     def log_message(self, message: str, to_slack: bool = False):
@@ -163,7 +163,7 @@ class Trader:
                                         1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"{pair}: 🔴 Selling trade for (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                            f"🔴 {pair}: Selling trade for (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -174,7 +174,7 @@ class Trader:
                                         )
                                     else:
                                         self.log_message(
-                                            f"{pair}: 🤚 Skipping sell for trade (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                            f"🤚 {pair}: Skipping sell for trade (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
                                             to_slack=False
                                         )
 
@@ -185,7 +185,7 @@ class Trader:
                             if len(open_positions) < max_trades:
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"{pair}: 🟢 Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
+                                    f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -196,7 +196,7 @@ class Trader:
                                 )
                             else:
                                 self.log_message(
-                                    f"{pair}: 🤚 Not buying as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
+                                    f"🤚 {pair}: Not buying as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
                                     to_slack=False
                                 )
 

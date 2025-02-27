@@ -121,7 +121,7 @@ class StateManager:
         open_positions = self.get_open_positions()
         if not open_positions:
             self.logger.log(
-                f"[{self.bot_name}]{self.pair}: ❌ No active position. Skipping profit calculation.",
+                f"[{self.bot_name}] ❌ {self.pair}:  No active position. Skipping profit calculation.",
                 to_console=True
             )
             return None
@@ -188,7 +188,7 @@ class StateManager:
                     json.dump(trades, f, indent=4)
         except Exception as e:
             self.logger.log(
-                f"[{self.bot_name}] 👽❌ Error logging trade: {e}", to_console=True, to_slack=False)
+                f"[{self.bot_name}] ❌ Error logging trade: {e}", to_console=True, to_slack=False)
 
     def get_actual_trade_profit(self, order_id, position, fee_percentage):
         """
@@ -257,7 +257,7 @@ class StateManager:
             quantity = self.adjust_quantity(self.pair, quantity)
             if quantity <= 0:
                 self.logger.log(
-                    f"[{self.bot_name}]{self.pair}: 👽 Invalid quantity: {quantity}", to_console=True, to_slack=True
+                    f"[{self.bot_name}] ❌ {self.pair}: Invalid quantity: {quantity}", to_console=True, to_slack=True
                 )
                 continue
 
@@ -295,7 +295,7 @@ class StateManager:
                             self.portfolio[self.pair].remove(position)
                         except ValueError:
                             self.logger.log(
-                                f"[{self.bot_name}]{self.pair}: ❌  Position not found in portfolio",
+                                f"[{self.bot_name}] ❌ {self.pair}: Position not found in portfolio",
                                 to_console=True
                             )
                     self.save_portfolio()
@@ -307,7 +307,7 @@ class StateManager:
                     break  # Stop retries if successful
                 else:
                     self.logger.log(
-                        f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt} for {order}",
+                        f"[{self.bot_name}] ❌ {self.pair}: Failed sell attempt {attempt} for {order}",
                         to_console=True, to_slack=True
                     )
                     time.sleep(wait_time)
@@ -332,7 +332,7 @@ class StateManager:
 
             if available_balance < budget:
                 error_msg = (
-                    f"[{self.bot_name}]{self.pair}: ❌ Insufficient funds to buy"
+                    f"[{self.bot_name}] ❌ {self.pair}: Insufficient funds to buy"
                     f"Required: {budget:.2f} EUR, available: {available_balance:.2f} EUR"
                 )
                 self.logger.log(error_msg, to_console=True, to_slack=True)
@@ -343,7 +343,7 @@ class StateManager:
             quantity = self.adjust_quantity(self.pair, quantity)
 
             if quantity <= 0:
-                error_msg = f"[{self.bot_name}]{self.pair}: ❌ Invalid quantity {quantity}"
+                error_msg = f"[{self.bot_name}] ❌ {self.pair}: Invalid quantity {quantity}"
                 self.logger.log(error_msg, to_console=True, to_slack=True)
                 return
 
@@ -371,5 +371,5 @@ class StateManager:
                     to_console=True, to_slack=False
                 )
             else:
-                error_msg = f"[{self.bot_name}]{self.pair}: ❌ Failed to execute buy order: {order}"
+                error_msg = f"[{self.bot_name}] ❌ {self.pair}: Failed to execute buy order: {order}"
                 self.logger.log(error_msg, to_console=True, to_slack=True)
