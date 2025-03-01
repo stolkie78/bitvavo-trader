@@ -96,111 +96,115 @@ class Trader:
     async def run(self):
         """Main async loop"""
         self.log_message(f"📊 Trading started at {datetime.now()}")
+    
         try:
             while True:
-                self.log_message(f"🐌 New cycle started at {datetime.now()}")
-                current_time = datetime.now()
-
-                # Fetch current price for RSI calculation
-                for pair in self.config["PAIRS"]:
-                    current_price = await asyncio.to_thread(
-                        TradingUtils.fetch_current_price, self.bitvavo, pair
-                    )
-
-                    # Add current price to RSI array
-                    self.price_history[pair].append(current_price)
-                    if len(self.price_history[pair]) > self.rsi_points:
-                        self.price_history[pair].pop(0)
-
-                    # Calculate RSI
-                    if len(self.price_history[pair]) >= self.rsi_points:
-                        rsi = await asyncio.to_thread(
-                            TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
-                        )
-                    else:
-                        rsi = None
-
-                    # Check stop-loss conditions
-                    open_positions = self.state_managers[pair].get_open_positions(
-                    )
-                    if open_positions:
-                        for position in open_positions:
-                            stop_loss_threshold = position["price"] * (
-                                1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
-                            if current_price <= stop_loss_threshold:
-                                self.log_message(
-                                    f"⛔️ {pair}: Stop loss triggered for current price {current_price:.2f} is below threshold {stop_loss_threshold:.2f}",
-                                    to_slack=True
+                try:
+                    self.log_message(f"🐌 New cycle started at {datetime.now()}")
+                    current_time = datetime.now()
+    
+                    for pair in self.config["PAIRS"]:
+                        try:
+                            # ✅ Haal de huidige prijs op
+                            current_price = await asyncio.to_thread(
+                                TradingUtils.fetch_current_price, self.bitvavo, pair
+                            )
+    
+                            # ✅ Voeg prijs toe aan RSI-historie
+                            self.price_history[pair].append(current_price)
+                            if len(self.price_history[pair]) > self.rsi_points:
+                                self.price_history[pair].pop(0)
+    
+                            # ✅ Bereken RSI
+                            rsi = None
+                            if len(self.price_history[pair]) >= self.rsi_points:
+                                rsi = await asyncio.to_thread(
+                                    TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
                                 )
-                                await asyncio.to_thread(
-                                    self.state_managers[pair].sell_position,
-                                    current_price,
-                                    self.config["TRADE_FEE_PERCENTAGE"],
-                                    stop_loss=True,
-                                    max_retries=self.config.get("STOP_LOSS_MAX_RETRIES", 3),
-                                    wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
-                                )
-
-                    # Start RSI calculations
-                    if rsi is not None:
-                        if current_price < 1:
-                            # Determine digits for high numerbered cryptos
-                            price_str = f"{current_price:.8f}"
-                        else:
-                            price_str = f"{current_price:.2f}"
-
-                        self.log_message(
-                            f"💎 {pair}[{len(open_positions)}] Current price: {price_str} EUR, RSI={rsi:.2f}")
-
-                        # Sell Logic
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"]:
+    
+                            # ✅ Stop-loss controle
+                            open_positions = self.state_managers[pair].get_open_positions()
                             if open_positions:
-                                for pos in open_positions:
-                                    profit_percentage = self.state_managers[pair].calculate_profit_for_position(
-                                        pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
-                                    )
-                                    absolute_profit = (current_price * pos["quantity"] * (
-                                        1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
-                                    if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
+                                for position in open_positions:
+                                    stop_loss_threshold = position["price"] * (
+                                        1 + self.config.get("STOP_LOSS_PERCENTAGE", -5) / 100)
+                                    if current_price <= stop_loss_threshold:
                                         self.log_message(
-                                            f"🔴 {pair}: Selling trade for (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                            f"⛔️ {pair}: Stop loss triggered at {current_price:.2f} (Threshold: {stop_loss_threshold:.2f})",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
                                             self.state_managers[pair].sell_position,
                                             current_price,
                                             self.config["TRADE_FEE_PERCENTAGE"],
-                                            stop_loss=False
+                                            stop_loss=True,
+                                            max_retries=self.config.get("STOP_LOSS_MAX_RETRIES", 3),
+                                            wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
+                                        )
+    
+                            # ✅ Logging van RSI en prijzen
+                            if rsi is not None:
+                                price_str = f"{current_price:.8f}" if current_price < 1 else f"{current_price:.2f}"
+                                self.log_message(
+                                    f"💎 {pair}[{len(open_positions)}] Current price: {price_str} EUR, RSI={rsi:.2f}"
+                                )
+    
+                                # ✅ Verkoopstrategie (RSI oversold)
+                                if rsi >= self.config["RSI_SELL_THRESHOLD"]:
+                                    if open_positions:
+                                        for pos in open_positions:
+                                            profit_percentage = self.state_managers[pair].calculate_profit_for_position(
+                                                pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
+                                            )
+                                            absolute_profit = (current_price * pos["quantity"] * (
+                                                1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
+                                            if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
+                                                self.log_message(
+                                                    f"🔴 {pair}: Selling trade (bought at {pos['price']:.2f}). RSI={rsi:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                                    to_slack=True
+                                                )
+                                                await asyncio.to_thread(
+                                                    self.state_managers[pair].sell_position,
+                                                    current_price,
+                                                    self.config["TRADE_FEE_PERCENTAGE"],
+                                                    stop_loss=False
+                                                )
+                                            else:
+                                                self.log_message(
+                                                    f"🤚 {pair}: Skipping sell (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                                    to_slack=False
+                                                )
+    
+                                # ✅ Koopstrategie (RSI overbought)
+                                elif rsi <= self.config["RSI_BUY_THRESHOLD"]:
+                                    max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
+                                    if len(open_positions) < max_trades:
+                                        investment_per_trade = self.pair_budgets[pair] / max_trades
+                                        self.log_message(
+                                            f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investment: {investment_per_trade:.2f}",
+                                            to_slack=True
+                                        )
+                                        await asyncio.to_thread(
+                                            self.state_managers[pair].buy,
+                                            current_price,
+                                            investment_per_trade,
+                                            self.config["TRADE_FEE_PERCENTAGE"]
                                         )
                                     else:
                                         self.log_message(
-                                            f"🤚 {pair}: Skipping sell for trade (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                            f"🤚 {pair}: Not buying, max open trades ({max_trades}) reached.",
                                             to_slack=False
                                         )
-
-                        # Buy Logic
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"]:
-                            max_trades = self.config.get(
-                                "MAX_TRADES_PER_PAIR", 1)
-                            if len(open_positions) < max_trades:
-                                investment_per_trade = self.pair_budgets[pair] / max_trades
-                                self.log_message(
-                                    f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
-                                    to_slack=True
-                                )
-                                await asyncio.to_thread(
-                                    self.state_managers[pair].buy,
-                                    current_price,
-                                    investment_per_trade,
-                                    self.config["TRADE_FEE_PERCENTAGE"]
-                                )
-                            else:
-                                self.log_message(
-                                    f"🤚 {pair}: Not buying as open trades ({len(open_positions)}) reached the limit of {max_trades}.",
-                                    to_slack=False
-                                )
-
-                await asyncio.sleep(self.config["CHECK_INTERVAL"])
+    
+                        except Exception as e:
+                            self.log_message(f"❌ Error in trading loop for {pair}: {e}", to_slack=True)
+    
+                    # ✅ Zorg ervoor dat de bot blijft draaien
+                    await asyncio.sleep(self.config["CHECK_INTERVAL"])
+    
+                except Exception as e:
+                    self.log_message(f"❌ Error in main loop: {e}", to_slack=True)
+    
         except KeyboardInterrupt:
             self.log_message("🛑 Trader stopped by user.", to_slack=True)
         finally:
