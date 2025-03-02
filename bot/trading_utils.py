@@ -106,48 +106,40 @@ class TradingUtils:
                 time.sleep(delay)
 
     @staticmethod
-    def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
+    def place_order(bitvavo, market, side, amount, demo_mode=False, max_retries=3):
         """
-        Places a buy or sell order via the Bitvavo API or simulates it in demo mode,
-        with retry options for temporary errors.
-        
-        :param bitvavo: Configured Bitvavo API client.
-        :param market: Trading pair, e.g. "BTC-EUR".
-        :param side: "buy" or "sell".
-        :param amount: The amount to buy or sell.
-        :param demo_mode: Whether the order is simulated (default: False).
-        :param retries: Number of attempts before throwing an error (default: 3).
-        :param delay: Delay in seconds between attempts (default: 2).
-        :return: Response from the Bitvavo API or a simulated order.
-        :raises: RuntimeError if placing the order fails after all attempts.
+        Attempts to place an order with retries. If it fails due to insufficient balance, it logs the error and skips the trade.
         """
-        if demo_mode:
-            simulated_order = {
-                "status": "demo",
-                "side": side,
-                "market": market,
-                "amount": amount,
-                "order_type": "market",
-                "timestamp": datetime.now().isoformat()
-            }
-            logging.debug("Simulated order: %s", simulated_order)
-            return simulated_order
-
-        for attempt in range(1, retries + 1):
+        for attempt in range(1, max_retries + 1):
             try:
-                order = bitvavo.placeOrder(
-                    market, side, "market", {"amount": amount})
-                if isinstance(order, dict) and order.get("error"):
+                logging.info(f"Attempt {attempt} to place {side} order for {market} with amount {amount}")
+                
+                if demo_mode:
+                    logging.info(f"Demo mode: Simulated {side} order for {market} ({amount})")
+                    return {"status": "success", "orderId": "demo_order"}
+                
+                order = bitvavo.placeOrder(market, side, {"amount": amount})
+                
+                if "error" in order:
                     raise ValueError(f"API error: {order.get('error')}")
-                logging.debug("Placed order for %s: %s", market, order)
-                return order
+    
+                return order  # Order succesvol geplaatst
+    
+            except ValueError as e:
+                logging.warning(f"Attempt {attempt} to place order on {market} failed: {e}")
+                
+                if "insufficient balance" in str(e).lower():
+                    logging.error(f"Skipping trade for {market} due to insufficient balance.")
+                    return None  # Keert terug zonder fout, positie wordt overgeslagen
+                
             except Exception as e:
-                logging.warning(
-                    "Attempt %d to place order on %s failed: %s", attempt, market, e)
-                if attempt == retries:
-                    raise RuntimeError(
-                        f"Error placing {side} order for {market}: {e}") from e
-                time.sleep(delay)
+                logging.error(f"Unexpected error during {side} order on {market}: {e}")
+    
+            if attempt < max_retries:
+                logging.info("Retrying...")
+    
+        logging.error(f"Failed to place {side} order for {market} after {max_retries} attempts.")
+        return None  # Positie overslaan en verdergaan met andere trades
 
     @staticmethod
     def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
@@ -169,7 +161,7 @@ class TradingUtils:
                     order_details = json.loads(order_details)
                 if "orderId" in order_details:
                     logging.debug("Fetched order details for %s: %s",
-                                  order_id, order_details)
+                                order_id, order_details)
                     return order_details
                 else:
                     raise ValueError(

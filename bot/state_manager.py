@@ -257,9 +257,10 @@ class StateManager:
                 quantity = self.adjust_quantity(self.pair, quantity)
                 if quantity <= 0:
                     self.logger.log(
-                        f"[{self.bot_name}] ❌ {self.pair}: Invalid quantity: {quantity}", to_console=True, to_slack=True
+                        f"[{self.bot_name}] ❌ {self.pair}: Invalid quantity: {quantity}",
+                        to_console=True, to_slack=True
                     )
-                    continue
+                    continue  # ❌ Overslaan bij ongeldige hoeveelheid
                 
                 cost_basis = position.get("spent", position["price"] * quantity)
                 revenue = price * quantity * (1 - fee_percentage / 100)
@@ -278,6 +279,13 @@ class StateManager:
                         self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
                     )
     
+                    if order is None:
+                        self.logger.log(
+                            f"[{self.bot_name}] ⚠️ {self.pair}: Skipping trade due to insufficient balance.",
+                            to_console=True, to_slack=True
+                        )
+                        break  # 🔄 Stop deze verkooppoging en ga naar de volgende positie
+                    
                     if order.get("status") == "demo" or "orderId" in order:
                         order_id = order.get("orderId")
                         actual_profit = None
@@ -311,10 +319,11 @@ class StateManager:
                             return  # Stop verdere verkopen
     
                         self.logger.log(
-                            f"[{self.bot_name}]{self.pair}: 👽 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
+                            f"[{self.bot_name}]{self.pair}: 🎯 Sold at {price:.2f}, Profit={profit_to_log:.2f}",
                             to_console=True, to_slack=False
                         )
-                        break  # Stop retries if successful
+                        break  # ✅ Stop retries if successful
+                    
                     else:
                         self.logger.log(
                             f"[{self.bot_name}] ❌ {self.pair}: Failed sell attempt {attempt} for {order}",
