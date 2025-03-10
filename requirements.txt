@@ -6,3 +6,5 @@ requests
 python-dotenv
 slack-sdk
 python-bitvavo-api
+six
+

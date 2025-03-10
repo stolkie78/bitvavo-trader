@@ -110,6 +110,13 @@ class TradingUtils:
         """
         Attempts to place an order with retries. If it fails due to insufficient balance, it logs the error and skips the trade.
         """
+        asset = market.split('-')[1] if side == 'buy' else market.split('-')[0]
+        balance = TradingUtils.get_account_balance(bitvavo, asset)
+
+        if balance < amount:
+            logging.error(f"Insufficient balance for {side} order on {market}. Required: {amount}, Available: {balance}")
+            return None
+
         for attempt in range(1, max_retries + 1):
             try:
                 logging.info(f"Attempt {attempt} to place {side} order for {market} with amount {amount}")
@@ -123,14 +130,14 @@ class TradingUtils:
                 if "error" in order:
                     raise ValueError(f"API error: {order.get('error')}")
     
-                return order  # Order succesvol geplaatst
+                return order  # Order successfully placed
     
             except ValueError as e:
                 logging.warning(f"Attempt {attempt} to place order on {market} failed: {e}")
                 
                 if "insufficient balance" in str(e).lower():
                     logging.error(f"Skipping trade for {market} due to insufficient balance.")
-                    return None  # Keert terug zonder fout, positie wordt overgeslagen
+                    return None  # Return without error, skip the position
                 
             except Exception as e:
                 logging.error(f"Unexpected error during {side} order on {market}: {e}")
@@ -139,7 +146,7 @@ class TradingUtils:
                 logging.info("Retrying...")
     
         logging.error(f"Failed to place {side} order for {market} after {max_retries} attempts.")
-        return None  # Positie overslaan en verdergaan met andere trades
+        return None  # Skip the position and continue with other trades
 
     @staticmethod
     def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
@@ -201,3 +208,142 @@ class TradingUtils:
                 f"Error processing candle data for {pair}: {e}") from e
         logging.debug("Fetched historical prices for %s: %s", pair, prices)
         return prices
+        @staticmethod
+        def calculate_atr(high, low, close, window_size):
+            """
+            Calculates the Average True Range (ATR) based on high, low, and close prices.
+            
+            :param high: List of high prices.
+            :param low: List of low prices.
+            :param close: List of close prices.
+            :param window_size: The window for the ATR calculation.
+            :return: The most recent ATR value or None if there is insufficient data.
+            """
+            if len(high) < window_size or len(low) < window_size or len(close) < window_size:
+                return None
+            high_series = pd.Series(high)
+            low_series = pd.Series(low)
+            close_series = pd.Series(close)
+            tr = pd.concat([high_series - low_series, 
+                            (high_series - close_series.shift()).abs(), 
+                            (low_series - close_series.shift()).abs()], axis=1).max(axis=1)
+            atr = tr.rolling(window=window_size).mean()
+            return atr.iloc[-1]
+
+        @staticmethod
+        def calculate_ema(prices, window_size):
+            """
+            Calculates the Exponential Moving Average (EMA) based on the price history.
+            
+            :param prices: List of historical prices.
+            :param window_size: The window for the EMA calculation.
+            :return: The most recent EMA value or None if there is insufficient data.
+            """
+            if len(prices) < window_size:
+                return None
+            ema = pd.Series(prices).ewm(span=window_size, adjust=False).mean()
+            return ema.iloc[-1]
+
+        @staticmethod
+        def calculate_adx(high, low, close, window_size):
+            """
+            Calculates the Average Directional Index (ADX) based on high, low, and close prices.
+            
+            :param high: List of high prices.
+            :param low: List of low prices.
+            :param close: List of close prices.
+            :param window_size: The window for the ADX calculation.
+            :return: The most recent ADX value or None if there is insufficient data.
+            """
+            if len(high) < window_size or len(low) < window_size or len(close) < window_size:
+                return None
+            high_series = pd.Series(high)
+            low_series = pd.Series(low)
+            close_series = pd.Series(close)
+            plus_dm = high_series.diff()
+            minus_dm = low_series.diff()
+            tr = pd.concat([high_series - low_series, 
+                            (high_series - close_series.shift()).abs(), 
+                            (low_series - close_series.shift()).abs()], axis=1).max(axis=1)
+            atr = tr.rolling(window=window_size).mean()
+            plus_di = 100 * (plus_dm.rolling(window=window_size).mean() / atr)
+            minus_di = 100 * (minus_dm.rolling(window=window_size).mean() / atr)
+            dx = (plus_di - minus_di).abs() / (plus_di + minus_di) * 100
+            adx = dx.rolling(window=window_size).mean()
+            return adx.iloc[-1]
+
+        @staticmethod
+        def calculate_macd(prices, fast_window=12, slow_window=26, signal_window=9):
+            """
+            Calculates the Moving Average Convergence Divergence (MACD) based on the price history.
+            
+            :param prices: List of historical prices.
+            :param fast_window: The window for the fast EMA (default: 12).
+            :param slow_window: The window for the slow EMA (default: 26).
+            :param signal_window: The window for the signal line (default: 9).
+            :return: A tuple (MACD line, Signal line) or None if there is insufficient data.
+            """
+            if len(prices) < slow_window:
+                return None
+            prices_series = pd.Series(prices)
+            ema_fast = prices_series.ewm(span=fast_window, adjust=False).mean()
+            ema_slow = prices_series.ewm(span=slow_window, adjust=False).mean()
+            macd_line = ema_fast - ema_slow
+            signal_line = macd_line.ewm(span=signal_window, adjust=False).mean()
+            return macd_line.iloc[-1], signal_line.iloc[-1]
+
+        @staticmethod
+        def calculate_bb(prices, window_size, num_std_dev):
+            """
+            Calculates the Bollinger Bands (BB) based on the price history.
+            
+            :param prices: List of historical prices.
+            :param window_size: The window for the moving average calculation.
+            :param num_std_dev: The number of standard deviations for the bands.
+            :return: A tuple (middle_band, upper_band, lower_band) or None if there is insufficient data.
+            """
+            if len(prices) < window_size:
+                return None
+            prices_series = pd.Series(prices)
+            middle_band = prices_series.rolling(window=window_size).mean()
+            std_dev = prices_series.rolling(window=window_size).std()
+            upper_band = middle_band + (std_dev * num_std_dev)
+            lower_band = middle_band - (std_dev * num_std_dev)
+            return middle_band.iloc[-1], upper_band.iloc[-1], lower_band.iloc[-1]
+
+        @staticmethod
+        def calculate_obv(prices, volumes):
+            """
+            Calculates the On-Balance Volume (OBV) based on the price and volume history.
+            
+            :param prices: List of historical prices.
+            :param volumes: List of historical volumes.
+            :return: The most recent OBV value.
+            """
+            if len(prices) != len(volumes):
+                raise ValueError("Prices and volumes must have the same length")
+            obv = [0]
+            for i in range(1, len(prices)):
+                if prices[i] > prices[i - 1]:
+                    obv.append(obv[-1] + volumes[i])
+                elif prices[i] < prices[i - 1]:
+                    obv.append(obv[-1] - volumes[i])
+                else:
+                    obv.append(obv[-1])
+            return obv[-1]
+
+        @staticmethod
+        def calculate_vwap(high, low, close, volume):
+            """
+            Calculates the Volume Weighted Average Price (VWAP) based on high, low, close prices and volume.
+            
+            :param high: List of high prices.
+            :param low: List of low prices.
+            :param close: List of close prices.
+            :param volume: List of volumes.
+            :return: The most recent VWAP value.
+            """
+            typical_price = [(h + l + c) / 3 for h, l, c in zip(high, low, close)]
+            cumulative_tp_vol = sum(tp * v for tp, v in zip(typical_price, volume))
+            cumulative_vol = sum(volume)
+            return cumulative_tp_vol / cumulative_vol if cumulative_vol != 0 else None
