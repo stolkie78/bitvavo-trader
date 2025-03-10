@@ -125,7 +125,7 @@ class TradingUtils:
                     logging.info(f"Demo mode: Simulated {side} order for {market} ({amount})")
                     return {"status": "success", "orderId": "demo_order"}
                 
-                order = bitvavo.placeOrder(market, side, {"amount": amount})
+                order = bitvavo.placeOrder(market, side, {"amount": amount, "body": {}})
                 
                 if "error" in order:
                     raise ValueError(f"API error: {order.get('error')}")
@@ -208,6 +208,7 @@ class TradingUtils:
                 f"Error processing candle data for {pair}: {e}") from e
         logging.debug("Fetched historical prices for %s: %s", pair, prices)
         return prices
+    
         @staticmethod
         def calculate_atr(high, low, close, window_size):
             """
