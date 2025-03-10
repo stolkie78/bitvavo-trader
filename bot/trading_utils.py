@@ -105,48 +105,79 @@ class TradingUtils:
                         f"Error fetching account balance for {asset}: {e}") from e
                 time.sleep(delay)
 
+
     @staticmethod
     def place_order(bitvavo, market, side, amount, demo_mode=False, max_retries=3):
         """
         Attempts to place an order with retries. If it fails due to insufficient balance, it logs the error and skips the trade.
+        
+        :param bitvavo: Bitvavo API client instance
+        :param market: Market string (e.g., 'ADA-EUR')
+        :param side: 'buy' or 'sell'
+        :param amount: Amount to buy or sell (float or str)
+        :param demo_mode: If True, simulate the order without placing it
+        :param max_retries: Number of retries before giving up
+        :return: Order response dict or None
         """
         asset = market.split('-')[1] if side == 'buy' else market.split('-')[0]
         balance = TradingUtils.get_account_balance(bitvavo, asset)
-
-        if balance < amount:
-            logging.error(f"Insufficient balance for {side} order on {market}. Required: {amount}, Available: {balance}")
+    
+        if balance < float(amount):
+            logging.error(
+                f"Insufficient balance for {side} order on {market}. Required: {amount}, Available: {balance}"
+            )
             return None
-
+    
         for attempt in range(1, max_retries + 1):
             try:
-                logging.info(f"Attempt {attempt} to place {side} order for {market} with amount {amount}")
-                
+                logging.info(
+                    f"Attempt {attempt} to place {side} order for {market} with amount {amount}"
+                )
+    
                 if demo_mode:
-                    logging.info(f"Demo mode: Simulated {side} order for {market} ({amount})")
+                    logging.info(
+                        f"Demo mode: Simulated {side} order for {market} ({amount})"
+                    )
                     return {"status": "success", "orderId": "demo_order"}
-                
-                order = bitvavo.placeOrder(market, side, {"amount": amount, "body": {}})
-                
+    
+                body = {
+                    "market": market,
+                    "side": side,
+                    "orderType": "market",
+                    "amount": str(amount)
+                }
+                order = bitvavo.placeOrder(body)
+    
+                if isinstance(order, str):
+                    order = json.loads(order)
+    
                 if "error" in order:
                     raise ValueError(f"API error: {order.get('error')}")
     
-                return order  # Order successfully placed
+                return order
     
             except ValueError as e:
                 logging.warning(f"Attempt {attempt} to place order on {market} failed: {e}")
-                
+    
                 if "insufficient balance" in str(e).lower():
-                    logging.error(f"Skipping trade for {market} due to insufficient balance.")
-                    return None  # Return without error, skip the position
-                
+                    logging.error(
+                        f"Skipping trade for {market} due to insufficient balance."
+                    )
+                    return None
+    
             except Exception as e:
-                logging.error(f"Unexpected error during {side} order on {market}: {e}")
+                logging.error(
+                    f"Unexpected error during {side} order on {market}: {e}"
+                )
     
             if attempt < max_retries:
                 logging.info("Retrying...")
     
         logging.error(f"Failed to place {side} order for {market} after {max_retries} attempts.")
-        return None  # Skip the position and continue with other trades
+        return None
+
+
+
 
     @staticmethod
     def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
