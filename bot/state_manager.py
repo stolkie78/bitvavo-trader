@@ -261,6 +261,23 @@ class StateManager:
                 )
                 continue
 
+            # ✅ Extra balanscontrole vooraf
+            asset = self.pair.split("-")[0]
+            try:
+                balance = TradingUtils.get_account_balance(self.bitvavo, asset)
+                if balance < quantity:
+                    self.logger.log(
+                        f"[{self.bot_name}] ❌ {self.pair}: Insufficient balance to sell. Have: {balance:.6f}, need: {quantity:.6f}",
+                        to_console=True, to_slack=True
+                    )
+                    continue
+            except Exception as e:
+                self.logger.log(
+                    f"[{self.bot_name}] ❌ Error fetching account balance before sell: {e}",
+                    to_console=True, to_slack=True
+                )
+                continue
+
             cost_basis = position.get("spent", position["price"] * quantity)
             revenue = price * quantity * (1 - fee_percentage / 100)
             estimated_profit = revenue - cost_basis
@@ -277,6 +294,15 @@ class StateManager:
                 order = TradingUtils.place_order(
                     self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
                 )
+
+                # ✅ Veilig afvangen van None response
+                if not isinstance(order, dict):
+                    self.logger.log(
+                        f"[{self.bot_name}] ❌ {self.pair}: Sell order returned invalid response: {order}",
+                        to_console=True, to_slack=True
+                    )
+                    time.sleep(wait_time)
+                    continue
 
                 if order.get("status") == "demo" or "orderId" in order:
                     order_id = order.get("orderId")
@@ -304,10 +330,10 @@ class StateManager:
                         f"[{self.bot_name}]{self.pair}: 💸 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
                         to_console=True, to_slack=False
                     )
-                    break  # Stop retries if successful
+                    break
                 else:
                     self.logger.log(
-                        f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt} for {order}",
+                        f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt}. Response: {order}",
                         to_console=True, to_slack=True
                     )
                     time.sleep(wait_time)
