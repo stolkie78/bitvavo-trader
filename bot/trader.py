@@ -16,7 +16,7 @@ class Trader:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.37"
+    VERSION = "0.1.38"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """

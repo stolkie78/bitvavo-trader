@@ -136,7 +136,7 @@ class TradingUtils:
         for attempt in range(1, retries + 1):
             try:
                 order = bitvavo.placeOrder(
-                    market, side, "market", {"amount": amount})
+                    market=market, side=side, orderType="market", body={"amount": amount})
                 if isinstance(order, dict) and order.get("error"):
                     raise ValueError(f"API error: {order.get('error')}")
                 logging.debug("Placed order for %s: %s", market, order)
