@@ -141,7 +141,7 @@ class TradingUtils:
                     if "sufficient balance" in order.get('error', '').lower():
                         logging.error("Insufficient balance to complete the operation for %s: %s", market, order.get('error'))
                         return None
-                    raise ValueError(f"API error: {order.get('error')}")
+                    return None
                 logging.debug("Placed order for %s: %s", market, order)
                 return order
             except Exception as e:
