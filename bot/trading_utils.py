@@ -138,6 +138,9 @@ class TradingUtils:
                 order = bitvavo.placeOrder(
                     market=market, side=side, orderType="market", body={"amount": amount})
                 if isinstance(order, dict) and order.get("error"):
+                    if "sufficient balance" in order.get('error', '').lower():
+                        logging.error("Insufficient balance to complete the operation for %s: %s", market, order.get('error'))
+                        return None
                     raise ValueError(f"API error: {order.get('error')}")
                 logging.debug("Placed order for %s: %s", market, order)
                 return order
