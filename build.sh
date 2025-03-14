@@ -26,6 +26,6 @@ git checkout "${TAG}" || handle_error "Failed to checkout branch or tag '${TAG}'
 
 # Build Docker image
 echo "🐳 Building Docker image '${IMAGE}:${TAG}'..."
-docker build -t "${IMAGE}:${TAG}" . --file Dockerfile_${TYPE} --no-cache || handle_error "Docker build failed."
+docker build -t "${IMAGE}:${TAG}" --file Dockerfile_${TYPE} . --no-cache || handle_error "Docker build failed."
 
 echo "✅ Successfully built Docker image '${IMAGE}:${TAG}'."
