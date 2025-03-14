@@ -46,7 +46,7 @@ def rebalance_portfolio(config, logger, state_managers, bitvavo_client):
     exclude_pairs = config.get("REBALANCE_EXCLUDE_PAIRS", [])
     rebalance_pairs = [pair for pair in pairs if pair not in exclude_pairs]
 
-    rsi_window = config.get("RSI_POINTS", 30)
+    rsi_window = config.get("CANDLES", 30)
     strategy = config.get("REBALANCE_STRATEGY", "equal")
     fee = config.get("TRADE_FEE_PERCENTAGE", 0.25)
     min_trade_value = config.get("REBALANCE_MIN_TRADE_VALUE", 10)
@@ -55,7 +55,7 @@ def rebalance_portfolio(config, logger, state_managers, bitvavo_client):
     logger.log("\n📊 Starting portfolio rebalance...", to_console=True)
 
     price_history = {
-        pair: TradingUtils.fetch_historical_prices(bitvavo_client, pair, limit=rsi_window, interval=config.get("RSI_INTERVAL", "1d"))
+        pair: TradingUtils.fetch_historical_prices(bitvavo_client, pair, limit=rsi_window, interval=config.get("CANDLE_INTERVAL", "1d"))
         for pair in rebalance_pairs
     }
 

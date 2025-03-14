@@ -7,7 +7,7 @@ handle_error() {
 }
 
 # Validate input arguments
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 2 ]; then
     echo "Usage: $0 <type hodl or trader> <tag>"
     exit 1
 fi
