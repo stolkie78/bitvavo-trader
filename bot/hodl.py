@@ -10,7 +10,7 @@ from bot.bitvavo_client import bitvavo
 
 
 class HodlBot:
-    VERSION = "0.1.7"
+    VERSION = "0.1.8"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args):
         self.config = config
@@ -25,14 +25,14 @@ class HodlBot:
         self.trade_log_file = os.path.join(self.data_dir, "daily_trades.json")
         self.portfolio = self.load_portfolio()
 
-        self.rsi_points = config.get("RSI_POINTS", 30)
-        self.rsi_interval = config.get("RSI_INTERVAL", "1d").lower()
+        self.candles = config.get("CANDLES", 60)
+        self.candle_interval = config.get("CANDLE_INTERVAL", "1d").lower()
         self.price_history = {}
 
         for pair in config["PAIRS"]:
             try:
                 historical_prices = TradingUtils.fetch_historical_prices(
-                    self.bitvavo, pair, limit=self.rsi_points, interval=self.rsi_interval
+                    self.bitvavo, pair, limit=self.candles, interval=self.candle_interval
                 )
                 self.price_history[pair] = historical_prices
                 self.logger.log(f"🕯️  {pair}: Price candles loaded: {len(historical_prices)}", to_console=True)
@@ -93,7 +93,7 @@ class HodlBot:
                     self.bitvavo,
                     self.config["PAIRS"],
                     self.price_history,
-                    rsi_window=self.rsi_points
+                    rsi_window=self.candles
                 )
 
                 if not ranked_coins:
@@ -105,10 +105,10 @@ class HodlBot:
                 current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, best_pair)
 
                 self.price_history[best_pair].append(current_price)
-                if len(self.price_history[best_pair]) > self.rsi_points:
+                if len(self.price_history[best_pair]) > self.candles:
                     self.price_history[best_pair].pop(0)
 
-                rsi = TradingUtils.calculate_rsi(self.price_history[best_pair], self.rsi_points)
+                rsi = TradingUtils.calculate_rsi(self.price_history[best_pair], self.candles)
                 macd, signal, _ = TradingUtils.calculate_macd(self.price_history[best_pair])
 
                 macd_str = f"{macd:.4f}" if macd is not None else "n/a"

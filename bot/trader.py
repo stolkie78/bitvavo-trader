@@ -16,7 +16,7 @@ class Trader:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.38"
+    VERSION = "0.1.39"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -32,18 +32,18 @@ class Trader:
         self.data_dir = "data"
         self.portfolio_file = os.path.join(self.data_dir, "portfolio.json")
         self.portfolio = self.load_portfolio()
-        self.rsi_points = config.get("RSI_POINTS", 14)  # aantal RSI punten
-        self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
         self.price_history = {}
         self.allow_sell = self.config.get("ALLOW_SELL", True)
+        self.candles = config.get("CANDLES", 60)
+        self.candle_interval = config.get("CANDLE_INTERVAL", "1h")
         
         for pair in config["PAIRS"]:
             try:
                 historical_prices = TradingUtils.fetch_historical_prices(
                     self.bitvavo,
                     pair,
-                    limit=self.rsi_points,
-                    interval=self.rsi_interval
+                    limit=self.candles,
+                    interval=self.candle_interval
                 )
                 self.price_history[pair] = historical_prices
                 historical_prices_len = len(historical_prices)
@@ -111,13 +111,13 @@ class Trader:
 
                     # Add current price to RSI array
                     self.price_history[pair].append(current_price)
-                    if len(self.price_history[pair]) > self.rsi_points:
+                    if len(self.price_history[pair]) > self.candles:
                         self.price_history[pair].pop(0)
 
                     # Calculate RSI
-                    if len(self.price_history[pair]) >= self.rsi_points:
+                    if len(self.price_history[pair]) >= self.candles:
                         rsi = await asyncio.to_thread(
-                            TradingUtils.calculate_rsi, self.price_history[pair], self.rsi_points
+                            TradingUtils.calculate_rsi, self.price_history[pair], self.candles
                         )
                     else:
                         rsi = None
