@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 import pandas as pd
 from ta.momentum import RSIIndicator
+from ta.trend import MACD
 
 
 class TradingUtils:
@@ -172,7 +173,7 @@ class TradingUtils:
                     order_details = json.loads(order_details)
                 if "orderId" in order_details:
                     logging.debug("Fetched order details for %s: %s",
-                                  order_id, order_details)
+                                order_id, order_details)
                     return order_details
                 else:
                     raise ValueError(
@@ -212,3 +213,103 @@ class TradingUtils:
                 f"Error processing candle data for {pair}: {e}") from e
         logging.debug("Fetched historical prices for %s: %s", pair, prices)
         return prices
+
+    @staticmethod
+    def calculate_ema(price_history, window_size):
+        """
+        Calculates the Exponential Moving Average (EMA) based on the price history.
+        
+        :param price_history: List of historical prices.
+        :param window_size: The window for the EMA calculation.
+        :return: The most recent EMA value or None if there is insufficient data.
+        """
+        if len(price_history) < window_size:
+            return None
+        ema_indicator = EMAIndicator(pd.Series(price_history), window=window_size)
+        return ema_indicator.ema_indicator().iloc[-1]
+
+    @staticmethod
+    def calculate_macd(price_history, window_slow=26, window_fast=12, window_sign=9):
+        """
+        Calculates the MACD (Moving Average Convergence Divergence) based on the price history.
+        
+        :param price_history: List of historical prices.
+        :param window_slow: The slow window for the MACD calculation (default: 26).
+        :param window_fast: The fast window for the MACD calculation (default: 12).
+        :param window_sign: The signal window for the MACD calculation (default: 9).
+        :return: A tuple containing the MACD line, signal line, and histogram values.
+        """
+        if len(price_history) < max(window_slow, window_fast, window_sign):
+            return None, None, None
+        macd_indicator = MACD(pd.Series(price_history), window_slow=window_slow, window_fast=window_fast, window_sign=window_sign)
+        macd_line = macd_indicator.macd().iloc[-1]
+        signal_line = macd_indicator.macd_signal().iloc[-1]
+        macd_histogram = macd_indicator.macd_diff().iloc[-1]
+        return macd_line, signal_line, macd_histogram
+
+    @staticmethod
+    def calculate_support_resistance(price_history, window_size):
+        """
+        Calculates support and resistance levels based on the price history.
+        
+        :param price_history: List of historical prices.
+        :param window_size: The window for the support/resistance calculation.
+        :return: A tuple containing the support and resistance levels.
+        """
+        if len(price_history) < window_size:
+            return None, None
+        price_series = pd.Series(price_history)
+        rolling_max = price_series.rolling(window=window_size).max()
+        rolling_min = price_series.rolling(window=window_size).min()
+        support = rolling_min.iloc[-1]
+        resistance = rolling_max.iloc[-1]
+        return support, resistance
+
+    @staticmethod
+    def calculate_coin_score(rsi, macd, signal):
+        """
+        Calculates a technical score for a coin based on RSI and MACD crossover.
+
+        :param rsi: Current RSI value.
+        :param macd: Current MACD value.
+        :param signal: Current MACD signal line.
+        :return: Technical score (higher is better).
+        """
+        score = 0
+        if rsi is not None:
+            score += max(0, 100 - rsi)
+        if macd is not None and signal is not None:
+            if macd > signal:
+                score += 20
+            score += (macd - signal) * 10
+        return score
+
+    @staticmethod
+    def rank_coins(bitvavo, pairs, price_history, rsi_window=14):
+        """
+        Ranks coins by technical score (RSI + MACD crossover)
+
+        :param bitvavo: Bitvavo API client
+        :param pairs: List of pairs to evaluate (e.g., ["BTC-EUR", "ETH-EUR"])
+        :param price_history: Dict of recent price history per pair
+        :param rsi_window: RSI window size (default 14)
+        :return: Sorted list of tuples (pair, score)
+        """
+        scores = []
+
+        for pair in pairs:
+            try:
+                prices = price_history.get(pair)
+                if not prices or len(prices) < rsi_window:
+                    continue
+
+                rsi = TradingUtils.calculate_rsi(prices, rsi_window)
+                macd, signal, _ = TradingUtils.calculate_macd(prices)
+                score = TradingUtils.calculate_coin_score(rsi, macd, signal)
+                scores.append((pair, score))
+
+            except Exception as e:
+                logging.warning(f"Failed to evaluate {pair}: {e}")
+                continue
+
+        return sorted(scores, key=lambda x: x[1], reverse=True)

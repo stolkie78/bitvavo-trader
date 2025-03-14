@@ -7,13 +7,14 @@ handle_error() {
 }
 
 # Validate input arguments
-if [ "$#" -ne 2 ]; then
-    echo "Usage: $0 <image_name> <tag>"
+if [ "$#" -ne 3 ]; then
+    echo "Usage: $0 <image_name> <tag> <type>"
     exit 1
 fi
 
 IMAGE=$1
 TAG=$2
+TYPE=$3
 
 echo "🚀 Starting build process for Docker image '${IMAGE}:${TAG}'..."
 git checkout main
@@ -25,6 +26,6 @@ git checkout "${TAG}" || handle_error "Failed to checkout branch or tag '${TAG}'
 
 # Build Docker image
 echo "🐳 Building Docker image '${IMAGE}:${TAG}'..."
-docker build -t "${IMAGE}:${TAG}" . --no-cache || handle_error "Docker build failed."
+docker build -t "${IMAGE}:${TAG}" --file Dockerfile_${TYPE} --no-cache || handle_error "Docker build failed."
 
 echo "✅ Successfully built Docker image '${IMAGE}:${TAG}'."

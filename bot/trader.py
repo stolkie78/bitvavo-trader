@@ -35,6 +35,8 @@ class Trader:
         self.rsi_points = config.get("RSI_POINTS", 14)  # aantal RSI punten
         self.rsi_interval = config.get("RSI_INTERVAL", "1M").lower()
         self.price_history = {}
+        self.allow_sell = self.config.get("ALLOW_SELL", True)
+        
         for pair in config["PAIRS"]:
             try:
                 historical_prices = TradingUtils.fetch_historical_prices(
@@ -141,29 +143,40 @@ class Trader:
                                     wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
+
                     # Start RSI calculations
                     if rsi is not None:
+                        allow_sell = self.config.get("ALLOW_SELL", True)
+
                         if current_price < 1:
-                            # Determine digits for high numerbered cryptos
+                            # Determine digits for high numbered cryptos
                             price_str = f"{current_price:.8f}"
                         else:
                             price_str = f"{current_price:.2f}"
 
                         self.log_message(
-                            f"💎 {pair}[{len(open_positions)}] Current price: {price_str} EUR, RSI={rsi:.2f}")
+                            f"💎 {pair}[{len(open_positions)}] Current price: {price_str} EUR, RSI={rsi:.2f}"
+                        )
 
-                        # Sell Logic
-                        if rsi >= self.config["RSI_SELL_THRESHOLD"]:
+                        # Sell Logic – only if ALLOW_SELL is True
+                        if allow_sell and rsi >= self.config["RSI_SELL_THRESHOLD"]:
                             if open_positions:
                                 for pos in open_positions:
                                     profit_percentage = self.state_managers[pair].calculate_profit_for_position(
-                                        pos, current_price, self.config["TRADE_FEE_PERCENTAGE"]
+                                        pos,
+                                        current_price,
+                                        self.config["TRADE_FEE_PERCENTAGE"]
                                     )
-                                    absolute_profit = (current_price * pos["quantity"] * (
-                                        1 - self.config["TRADE_FEE_PERCENTAGE"] / 100)) - (pos["price"] * pos["quantity"])
+                                    absolute_profit = (
+                                        (current_price * pos["quantity"] * (1 - self.config["TRADE_FEE_PERCENTAGE"] / 100))
+                                        - (pos["price"] * pos["quantity"])
+                                    )
+
                                     if profit_percentage >= self.config["MINIMUM_PROFIT_PERCENTAGE"]:
                                         self.log_message(
-                                            f"🔴 {pair}: Selling trade for (bought at {pos['price']:.2f}). Current RSI={rsi:.2f}, Price: {current_price:.2f}, Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
+                                            f"🔴 {pair}: Selling trade for (bought at {pos['price']:.2f}). "
+                                            f"Current RSI={rsi:.2f}, Price: {current_price:.2f}, "
+                                            f"Profit: {profit_percentage:.2f}% / {absolute_profit:.2f} EUR",
                                             to_slack=True
                                         )
                                         await asyncio.to_thread(
@@ -174,18 +187,26 @@ class Trader:
                                         )
                                     else:
                                         self.log_message(
-                                            f"🤚 {pair}: Skipping sell for trade (bought at {pos['price']:.2f}): Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
+                                            f"🤚 {pair}: Skipping sell for trade (bought at {pos['price']:.2f}): "
+                                            f"Profit {profit_percentage:.2f}% / {absolute_profit:.2f} EUR below threshold.",
                                             to_slack=False
                                         )
 
-                        # Buy Logic
-                        elif rsi <= self.config["RSI_BUY_THRESHOLD"]:
-                            max_trades = self.config.get(
-                                "MAX_TRADES_PER_PAIR", 1)
+                        elif not allow_sell:
+                            self.log_message(
+                                f"🚫 {pair}: SELL logic disabled – skipping RSI SELL evaluation.",
+                                to_slack=False
+                            )
+
+                        # Buy Logic (always allowed)
+                        if rsi <= self.config["RSI_BUY_THRESHOLD"]:
+                            max_trades = self.config.get("MAX_TRADES_PER_PAIR", 1)
                             if len(open_positions) < max_trades:
                                 investment_per_trade = self.pair_budgets[pair] / max_trades
                                 self.log_message(
-                                    f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. Open trades: {len(open_positions)} (max allowed: {max_trades}). Investeringsbedrag per trade: {investment_per_trade:.2f}",
+                                    f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. "
+                                    f"Open trades: {len(open_positions)} (max allowed: {max_trades}). "
+                                    f"Investeringsbedrag per trade: {investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(
@@ -201,10 +222,14 @@ class Trader:
                                 )
 
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
+
         except KeyboardInterrupt:
             self.log_message("🛑 Trader stopped by user.", to_slack=True)
+
         finally:
             self.log_message("✅ Trader finished trading.", to_slack=True)
+
+
 
 
 if __name__ == "__main__":
