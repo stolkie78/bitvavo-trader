@@ -7,4 +7,5 @@ python-dotenv
 slack-sdk
 python-bitvavo-api
 six
-
+scikit-learn>=1.0
+imbalanced-learn
