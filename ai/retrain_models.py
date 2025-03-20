@@ -29,7 +29,7 @@ def retrain_models(config_path, limit=1000, interval="1h"):
         print(f"\n🔄 Retraining for {pair}...")
 
         generate_cmd = [
-            "python", "bot/generate_training_data.py",
+            "python", "ai/generate_training_data.py",
             "--pair", pair,
             "--limit", str(limit),
             "--interval", interval,
@@ -37,7 +37,7 @@ def retrain_models(config_path, limit=1000, interval="1h"):
         ]
 
         train_cmd = [
-            "python", "bot/train_model.py",
+            "python", "ai/train_model.py",
             "--data", data_file,
             "--output", model_file
         ]
