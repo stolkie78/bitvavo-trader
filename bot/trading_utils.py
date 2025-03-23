@@ -490,6 +490,31 @@ class TradingUtils:
         vol_avg = sum(volume_series[:-1]) / max(1, len(volume_series) - 1)
         return (vol_now - vol_avg) / vol_avg if vol_avg != 0 else 0.0
 
+    @staticmethod
+    def rank_coins(bitvavo, pairs: list, price_history: dict, rsi_window: int) -> list:
+        """
+        Rank coins based on a composite indicator score.
+        Returns a sorted list of tuples: (pair, score)
+        """
+        rankings = []
+        for pair in pairs:
+            history = price_history.get(pair, [])
+            if len(history) < rsi_window:
+                continue
+            
+            try:
+                rsi = TradingUtils.calculate_rsi(history, rsi_window)
+                macd, signal, _ = TradingUtils.calculate_macd(history)
+                if rsi is None or macd is None or signal is None:
+                    continue
+                
+                score = 100 - rsi  # inverse RSI (lagere RSI = aantrekkelijker)
+                score += abs(macd - signal) * 100  # MACD verschil als momentum indicator
+                rankings.append((pair, score))
+            except Exception as e:
+                continue
+            
+        return sorted(rankings, key=lambda x: x[1], reverse=True)
 
 
 
