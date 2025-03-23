@@ -154,6 +154,7 @@ class HodlBot:
                                         daily_trade_log[today_str][best_pair] = 0
                                     daily_trade_log[today_str][best_pair] += 1
                                     self.save_daily_trades(daily_trade_log)
+                                    break
                     else:
                         self.log_message(f"🤚 {best_pair}: No buy signal — MACD crossover not confirmed.")
 
