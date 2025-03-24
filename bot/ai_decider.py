@@ -39,7 +39,7 @@ class AIDecider:
         )
     
         investment_multiplier = min(1.0, max(0.1, risk_score))
-        self.logger.log(f"🧠 {pair}: AI Decision BUY → Prob: {probability:.4f}, Risk Score: {risk_score}, Multiplier: {investment_multiplier:.2f}", to_console=True)
+        self.logger.log(f"  ↳ 🧠 {pair}: AI Decision BUY → Prob: {probability:.4f}, Risk Score: {risk_score}, Multiplier: {investment_multiplier:.2f}", to_console=True)
     
         return {
             "decision": probability >= 0.5,
@@ -59,7 +59,7 @@ class AIDecider:
             raise ValueError(f"Feature mismatch in SELL for {pair}: {e}")
 
         probability = model.predict_proba(features_df)[0][0]  # class 0 = SELL
-        self.logger.log(f"🧠 {pair}: AI Decision SELL  → Probability: {probability:.4f}", to_console=True)
+        self.logger.log(f"  ↳ 🧠 {pair}: AI Decision SELL  → Probability: {probability:.4f}", to_console=True)
         return probability
 
     def assess_risk_score(self, rsi, atr, momentum, macd_diff, coin_rank_score):

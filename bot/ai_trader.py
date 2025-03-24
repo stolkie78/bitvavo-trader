@@ -83,7 +83,7 @@ class Trader:
         return {}
 
     def log_message(self, message: str, to_slack: bool = False):
-        prefixed_message = f"{message}"
+        prefixed_message = f"[{self.bot_name}]  {message}"
         self.logger.log(prefixed_message, to_console=True, to_slack=to_slack)
 
     def log_startup_parameters(self):
