@@ -39,7 +39,8 @@ def retrain_models(config_path, limit=1000, interval="1h"):
         train_cmd = [
             "python", "ai/train_model.py",
             "--data", data_file,
-            "--output", model_file
+            "--output", model_file,
+            "--balance", "yes"
         ]
 
         result_gen = run(generate_cmd)

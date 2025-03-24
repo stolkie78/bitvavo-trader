@@ -98,7 +98,17 @@ class Trader:
             while True:
                 self.log_message(f"🐌 New evaluation cycle at {datetime.now()}")
 
-                for pair in self.config["PAIRS"]:
+                ranked_coins = TradingUtils.rank_coins(
+                    self.bitvavo,
+                    self.config["PAIRS"],
+                    self.price_history,
+                    rsi_window=self.candles
+                )
+                rank_dict = {pair: score for pair, score in ranked_coins}
+                top_pairs = [pair for pair, _ in ranked_coins[:self.config.get("TOP_N_PAIRS", len(ranked_coins))]]
+                self.log_message(f"🔍 Top pairs selected for evaluation: {top_pairs}")
+                for pair in top_pairs:
+                    
                     current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, pair)
                     self.price_history[pair]["close"].append(current_price)
                     if len(self.price_history[pair]["close"]) > self.candles:
@@ -127,27 +137,71 @@ class Trader:
                         f"🔎 {pair}: Price={current_price:.4f}, RSI={rsi:.2f}, MACD={macd:.4f}, Signal={signal:.4f}, ATR={atr:.4f}, MOM={momentum:.4f}"
                     )
 
-                    self.ai_decider.should_sell(
-                        pair,
-                        rsi, macd, signal, macd_histogram, ema_fast, ema_slow,
+                    # SELL
+                    sell_result = self.ai_decider.should_sell(
+                        pair, rsi, macd, signal, macd_histogram, ema_fast, ema_slow,
                         support, resistance, atr, momentum, volume_change,
                         current_price, macd_diff, ema_diff, price_minus_support, resistance_minus_price
                     )
+                    if isinstance(sell_result, dict):
+                        sell_decision = sell_result.get("decision", False)
+                        sell_probability = sell_result.get("probability", 0.0)
+                    else:
+                        sell_decision = sell_result
+                        sell_probability = 0.0
 
-                    self.ai_decider.should_buy(
-                        pair,
-                        rsi, macd, signal, macd_histogram, ema_fast, ema_slow,
+                    if sell_decision and sell_probability >= self.config.get("SELL_PROBABILITY_THRESHOLD", 0.9):
+                        self.log_message(f"🔴 {pair}: AI-decider triggered SELL at {current_price:.4f}")
+                        try:
+                            self.state_managers[pair].sell_position(current_price, self.config["TRADE_FEE_PERCENTAGE"])
+                        except Exception as e:
+                            self.log_message(f"❌ Error during sell for {pair}: {e}")
+
+                    # BUY
+                    buy_result = self.ai_decider.should_buy(
+                        pair, rsi, macd, signal, macd_histogram, ema_fast, ema_slow,
                         support, resistance, atr, momentum, volume_change,
-                        current_price, macd_diff, ema_diff, price_minus_support, resistance_minus_price
+                        current_price, macd_diff, ema_diff, price_minus_support, resistance_minus_price,
+                        coin_rank_score=rank_dict.get(pair, 0.0)  # <- voeg coin rank score toe
                     )
 
+                    if isinstance(buy_result, dict):
+                        buy_decision = buy_result.get("decision", False)
+                        buy_probability = buy_result.get("probability", 0.0)
+                        risk_multiplier = buy_result.get("multiplier", 1.0)
+                    else:
+                        buy_decision = buy_result
+                        buy_probability = 0.0
+                        risk_multiplier = 1.0
+
+                    if buy_decision and buy_probability >= self.config.get("BUY_PROBABILITY_THRESHOLD", 0.9):
+                        max_budget = self.pair_budgets.get(pair, 0)
+                        invest_amount = round(max_budget * risk_multiplier, 2)
+
+                        if invest_amount > 0:
+                            self.log_message(
+                                f"🟢 {pair}: AI-decider triggered BUY at {current_price:.4f}, probability={buy_probability:.4f}, multiplier={risk_multiplier:.2f}, investing {invest_amount:.2f} EUR"
+                            )
+                            try:
+                                self.state_managers[pair].buy(
+                                    current_price,
+                                    invest_amount,
+                                    self.config["TRADE_FEE_PERCENTAGE"]
+                                )
+                            except Exception as e:
+                                self.log_message(f"❌ Error during buy for {pair}: {e}")
+                        else:
+                            self.log_message(f"⚠️ {pair}: Calculated invest amount is 0 EUR, skipping BUY")
+
+
+
+                self.log_message(f"💤 Next run starts in {self.config['CHECK_INTERVAL']} seconds.")
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
 
         except KeyboardInterrupt:
             self.log_message("🛑 AITrader stopped by user.", to_slack=True)
         finally:
             self.log_message("✅ AITrader finished.", to_slack=True)
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="AI Trader Bot")

@@ -121,7 +121,6 @@ class HodlBot:
                 )
 
                 open_positions = self.state_managers[best_pair].get_open_positions()
-
                 daily_trade_log = self.load_daily_trades()
                 today_str = date.today().isoformat()
                 trades_today = daily_trade_log.get(today_str, {}).get(best_pair, 0)

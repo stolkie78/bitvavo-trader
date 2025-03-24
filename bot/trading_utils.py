@@ -498,27 +498,30 @@ class TradingUtils:
         """
         rankings = []
         for pair in pairs:
-            history = price_history.get(pair, [])
-            if len(history) < rsi_window:
-                continue
-            
             try:
-                rsi = TradingUtils.calculate_rsi(history, rsi_window)
-                macd, signal, _ = TradingUtils.calculate_macd(history)
+                history = price_history.get(pair, {})
+                closes = history.get("close", [])
+                if len(closes) < rsi_window:
+                    continue
+                
+                rsi = TradingUtils.calculate_rsi(closes, rsi_window)
+                macd, signal, _ = TradingUtils.calculate_macd(closes)
                 if rsi is None or macd is None or signal is None:
                     continue
                 
                 score = 100 - rsi  # inverse RSI (lagere RSI = aantrekkelijker)
                 score += abs(macd - signal) * 100  # MACD verschil als momentum indicator
                 rankings.append((pair, score))
+    
             except Exception as e:
-                continue
+                continue  # log eventueel hier de fout
             
         return sorted(rankings, key=lambda x: x[1], reverse=True)
-
-
-
-
-
-
-
+    
+    
+    
+    
+    
+    
+    
+    
