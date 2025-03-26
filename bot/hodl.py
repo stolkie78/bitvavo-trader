@@ -10,7 +10,7 @@ from bot.bitvavo_client import bitvavo
 
 
 class HodlBot:
-    VERSION = "0.1.11"
+    VERSION = "0.1.12"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args):
         self.config = config
@@ -125,43 +125,42 @@ class HodlBot:
                         f"🔎 {best_pair}: Price={current_price:.2f}, RSI={rsi_str}, MACD={macd_str}, Signal={signal_str}, Score={score_str}"
                     )
 
-                open_positions = self.state_managers[best_pair].get_open_positions()
-                daily_trade_log = self.load_daily_trades()
-                today_str = date.today().isoformat()
-                trades_today = daily_trade_log.get(today_str, {}).get(best_pair, 0)
-                max_daily_trades = self.config.get("MAX_DAILY_TRADES_PER_PAIR", 1)
+                    open_positions = self.state_managers[best_pair].get_open_positions()
+                    daily_trade_log = self.load_daily_trades()
+                    today_str = date.today().isoformat()
+                    trades_today = daily_trade_log.get(today_str, {}).get(best_pair, 0)
+                    max_daily_trades = self.config.get("MAX_DAILY_TRADES_PER_PAIR", 1)
 
-                if rsi is not None and macd is not None and signal is not None:
-                    if macd > signal:
-                        for dca_layer in self.config.get("DCA_LAYERS", []):
-                            threshold = dca_layer.get("RSI_THRESHOLD")
-                            amount = dca_layer.get("AMOUNT")
+                    if rsi is not None and macd is not None and signal is not None:
+                        if macd > signal:
+                            for dca_layer in self.config.get("DCA_LAYERS", []):
+                                threshold = dca_layer.get("RSI_THRESHOLD")
+                                amount = dca_layer.get("AMOUNT")
 
-                            if rsi <= threshold and trades_today < max_daily_trades:
-                                investment = min(available_budget, amount)
+                                if rsi <= threshold and trades_today < max_daily_trades:
+                                    investment = min(available_budget, amount)
 
-                                if investment <= 0:
-                                    self.log_message(f"⚠️ Skipping DCA buy. Not enough EUR budget available after reserving {min_reserve:.2f} EUR.")
-                                else:
-                                    self.log_message(
-                                        f"🟢 {best_pair}: DCA Buy triggered. RSI={rsi:.2f} ≤ {threshold}, Investing {investment:.2f} EUR"
-                                    )
-                                    await asyncio.to_thread(
-                                        self.state_managers[best_pair].buy,
-                                        current_price,
-                                        investment,
-                                        self.config["TRADE_FEE_PERCENTAGE"]
-                                    )
-                                    if today_str not in daily_trade_log:
-                                        daily_trade_log[today_str] = {}
-                                    if best_pair not in daily_trade_log[today_str]:
-                                        daily_trade_log[today_str][best_pair] = 0
-                                    daily_trade_log[today_str][best_pair] += 1
-                                    self.save_daily_trades(daily_trade_log)
-                                    break
-                    else:
-                        self.log_message(f"🤚 {best_pair}: No buy signal — MACD crossover not confirmed.")
-
+                                    if investment <= 0:
+                                        self.log_message(f"⚠️ Skipping DCA buy. Not enough EUR budget available after reserving {min_reserve:.2f} EUR.")
+                                    else:
+                                        self.log_message(
+                                            f"🟢 {best_pair}: DCA Buy triggered. RSI={rsi:.2f} ≤ {threshold}, Investing {investment:.2f} EUR"
+                                        )
+                                        await asyncio.to_thread(
+                                            self.state_managers[best_pair].buy,
+                                            current_price,
+                                            investment,
+                                            self.config["TRADE_FEE_PERCENTAGE"]
+                                        )
+                                        if today_str not in daily_trade_log:
+                                            daily_trade_log[today_str] = {}
+                                        if best_pair not in daily_trade_log[today_str]:
+                                            daily_trade_log[today_str][best_pair] = 0
+                                        daily_trade_log[today_str][best_pair] += 1
+                                        self.save_daily_trades(daily_trade_log)
+                                        break
+                        else:
+                            self.log_message(f"🤚 {best_pair}: No buy signal — MACD crossover not confirmed.")
                 await asyncio.sleep(self.config["CHECK_INTERVAL"])
 
         except KeyboardInterrupt:
