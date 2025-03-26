@@ -10,7 +10,7 @@ from bot.bitvavo_client import bitvavo
 
 
 class HodlBot:
-    VERSION = "0.1.9"
+    VERSION = "0.1.10"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args):
         self.config = config

@@ -113,7 +113,7 @@ class TradingUtils:
     def place_order(bitvavo, market, side, amount, demo_mode=False, max_retries=3):
         """
         Attempts to place an order with retries. If it fails due to insufficient balance, it logs the error and skips the trade.
-        
+
         :param bitvavo: Bitvavo API client instance
         :param market: Market string (e.g., 'ADA-EUR')
         :param side: 'buy' or 'sell'
@@ -124,59 +124,62 @@ class TradingUtils:
         """
         asset = market.split('-')[1] if side == 'buy' else market.split('-')[0]
         balance = TradingUtils.get_account_balance(bitvavo, asset)
-    
+
         if balance < float(amount):
             logging.error(
-                f"Insufficient balance for {side} order on {market}. Required: {amount}, Available: {balance}"
+                f"Insufficient balance for {side} order on {market}. "
+                f"Required: {amount}, Available: {balance}"
             )
             return None
-    
+
         for attempt in range(1, max_retries + 1):
             try:
                 logging.info(
                     f"Attempt {attempt} to place {side} order for {market} with amount {amount}"
                 )
-    
+
                 if demo_mode:
                     logging.info(
                         f"Demo mode: Simulated {side} order for {market} ({amount})"
                     )
-                    return {"status": "success", "orderId": "demo_order"}
-    
+                    return {"status": "demo", "orderId": "demo_order"}
+
+                # ✅ Fix: gebruik correcte API-aanroep met expliciete parameters
                 body = {
-                    "market": market,
-                    "side": side,
-                    "orderType": "market",
                     "amount": str(amount)
                 }
-                order = bitvavo.placeOrder(body)
-    
+                order = bitvavo.placeOrder(market, side, "market", body)
+
                 if isinstance(order, str):
                     order = json.loads(order)
-    
+
                 if "error" in order:
                     raise ValueError(f"API error: {order.get('error')}")
-    
+
                 return order
-    
+
             except ValueError as e:
-                logging.warning(f"Attempt {attempt} to place order on {market} failed: {e}")
-    
+                logging.warning(
+                    f"Attempt {attempt} to place order on {market} failed: {e}"
+                )
+
                 if "insufficient balance" in str(e).lower():
                     logging.error(
                         f"Skipping trade for {market} due to insufficient balance."
                     )
                     return None
-    
+
             except Exception as e:
                 logging.error(
                     f"Unexpected error during {side} order on {market}: {e}"
                 )
-    
+
             if attempt < max_retries:
                 logging.info("Retrying...")
-    
-        logging.error(f"Failed to place {side} order for {market} after {max_retries} attempts.")
+
+        logging.error(
+            f"Failed to place {side} order for {market} after {max_retries} attempts."
+        )
         return None
 
 
