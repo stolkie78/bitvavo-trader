@@ -34,7 +34,7 @@ class HodlBot:
                 historical_prices = TradingUtils.fetch_historical_prices(
                     self.bitvavo, pair, limit=self.candles, interval=self.candle_interval
                 )
-                self.price_history[pair] = historical_prices
+                self.price_history[pair] = {"close": historical_prices}
                 self.logger.log(f"🕯️  {pair}: Price candles loaded: {len(historical_prices)}", to_console=True)
             except Exception as e:
                 self.logger.log(f"⚠️ {pair}: Failed to load price history: {e}", to_console=True)
@@ -90,35 +90,40 @@ class HodlBot:
                     continue
 
                 ranked_coins = TradingUtils.rank_coins(
-                    self.bitvavo,
-                    self.config["PAIRS"],
-                    self.price_history,
-                    rsi_window=self.candles
-                )
+    self.bitvavo,
+    self.config["PAIRS"],
+    self.price_history,
+    rsi_window=self.candles
+)
 
                 if not ranked_coins:
                     self.log_message("⚠️ No valid coin rankings available.")
                     await asyncio.sleep(self.config["CHECK_INTERVAL"])
                     continue
+                
+                top_n = self.config.get("TOP_N_PAIRS", 1)
+                top_ranked = ranked_coins[:top_n]
 
-                best_pair, best_score = ranked_coins[0]
-                current_price = await asyncio.to_thread(TradingUtils.fetch_current_price, self.bitvavo, best_pair)
+                # 🔁 Loop door top N pairs
+                for best_pair, best_score in top_ranked:
+                    current_price = await asyncio.to_thread(
+                        TradingUtils.fetch_current_price, self.bitvavo, best_pair
+                    )
+                    self.price_history[best_pair]["close"].append(current_price)
+                    if len(self.price_history[best_pair]["close"]) > self.candles:
+                        self.price_history[best_pair]["close"].pop(0)
 
-                self.price_history[best_pair].append(current_price)
-                if len(self.price_history[best_pair]) > self.candles:
-                    self.price_history[best_pair].pop(0)
+                    rsi = TradingUtils.calculate_rsi(self.price_history[best_pair]["close"], self.candles)
+                    macd, signal, _ = TradingUtils.calculate_macd(self.price_history[best_pair]["close"])
 
-                rsi = TradingUtils.calculate_rsi(self.price_history[best_pair], self.candles)
-                macd, signal, _ = TradingUtils.calculate_macd(self.price_history[best_pair])
+                    macd_str = f"{macd:.4f}" if macd is not None else "n/a"
+                    signal_str = f"{signal:.4f}" if signal is not None else "n/a"
+                    rsi_str = f"{rsi:.2f}" if rsi is not None else "n/a"
+                    score_str = f"{best_score:.2f}" if best_score is not None else "n/a"
 
-                macd_str = f"{macd:.4f}" if macd is not None else "n/a"
-                signal_str = f"{signal:.4f}" if signal is not None else "n/a"
-                rsi_str = f"{rsi:.2f}" if rsi is not None else "n/a"
-                score_str = f"{best_score:.2f}" if best_score is not None else "n/a"
-
-                self.log_message(
-                    f"🔎 {best_pair}: Price={current_price:.2f}, RSI={rsi_str}, MACD={macd_str}, Signal={signal_str}, Score={score_str}"
-                )
+                    self.log_message(
+                        f"🔎 {best_pair}: Price={current_price:.2f}, RSI={rsi_str}, MACD={macd_str}, Signal={signal_str}, Score={score_str}"
+                    )
 
                 open_positions = self.state_managers[best_pair].get_open_positions()
                 daily_trade_log = self.load_daily_trades()
