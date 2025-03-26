@@ -496,35 +496,39 @@ class TradingUtils:
     @staticmethod
     def rank_coins(bitvavo, pairs: list, price_history: dict, rsi_window: int) -> list:
         """
-        Rank coins based on a composite indicator score.
-        Returns a sorted list of tuples: (pair, score)
+        Rank coins based on a composite indicator score using RSI and MACD.
+    
+        The score favors coins with low RSI (indicating oversold conditions) and
+        a strong MACD momentum (difference between MACD and Signal).
+    
+        :param bitvavo: Bitvavo API client.
+        :param pairs: List of trading pairs.
+        :param price_history: Dict with structure { pair: { "close": [...] } } or raw list.
+        :param rsi_window: Window size for RSI calculation.
+        :return: List of tuples (pair, score), sorted descending.
         """
         rankings = []
+    
         for pair in pairs:
             try:
                 history = price_history.get(pair, {})
-                closes = history.get("close", [])
-                if len(closes) < rsi_window:
+                # ✅ Support both dict with 'close' key and raw list fallback
+                closes = history.get("close") if isinstance(history, dict) else history
+    
+                if not closes or len(closes) < rsi_window:
                     continue
                 
                 rsi = TradingUtils.calculate_rsi(closes, rsi_window)
                 macd, signal, _ = TradingUtils.calculate_macd(closes)
+    
                 if rsi is None or macd is None or signal is None:
                     continue
                 
-                score = 100 - rsi  # inverse RSI (lagere RSI = aantrekkelijker)
-                score += abs(macd - signal) * 100  # MACD verschil als momentum indicator
+                score = (100 - rsi) + abs(macd - signal) * 100
                 rankings.append((pair, score))
     
             except Exception as e:
-                continue  # log eventueel hier de fout
+                logging.warning(f"[rank_coins] ⚠️ Failed to score {pair}: {e}")
+                continue
             
         return sorted(rankings, key=lambda x: x[1], reverse=True)
-    
-    
-    
-    
-    
-    
-    
-    
