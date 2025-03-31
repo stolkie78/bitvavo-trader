@@ -16,7 +16,7 @@ class Trader:
     """
     Async Scalping bot
     """
-    VERSION = "0.1.40"
+    VERSION = "0.1.41"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         """
@@ -136,10 +136,7 @@ class Trader:
                                         await asyncio.to_thread(
                                             self.state_managers[pair].sell_position,
                                             current_price,
-                                            self.config["TRADE_FEE_PERCENTAGE"],
-                                            stop_loss=True,
-                                            max_retries=self.config.get("STOP_LOSS_MAX_RETRIES", 3),
-                                            wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
+                                            self.config["TRADE_FEE_PERCENTAGE"]
                                         )
     
                             # ✅ Logging van RSI en prijzen
@@ -167,7 +164,6 @@ class Trader:
                                                     self.state_managers[pair].sell_position,
                                                     current_price,
                                                     self.config["TRADE_FEE_PERCENTAGE"],
-                                                    stop_loss=False
                                                 )
                                             else:
                                                 self.log_message(
