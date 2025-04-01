@@ -8,12 +8,13 @@ handle_error() {
 
 # Validate input arguments
 if [ "$#" -ne 3 ]; then
-    echo "Usage: $0 <type hodl or trader> <tag>"
+    echo "Usage: $0 <tag>"
     exit 1
 fi
 
-TYPE=$1
-TAG=$2
+TAG=$1
+VERSION=$(echo "${TAG}" | cut -d'/' -f2)
+TYPE=$(echo "${TAG}" | cut -d'/' -f1)
 IMAGE=bitvavo-${TYPE}
 
 echo "🚀 Starting build process for Docker image '${IMAGE}:${TAG}'..."
