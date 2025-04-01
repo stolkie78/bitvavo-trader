@@ -13,7 +13,7 @@ import argparse
 import json
 
 class Trader:
-    VERSION = "0.1.3"
+    VERSION = "0.1.5"
 
     def __init__(self, config: dict, logger: LoggingFacility, state_managers: dict, bitvavo, args: argparse.Namespace):
         self.config = config
