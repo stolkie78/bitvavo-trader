@@ -12,9 +12,9 @@ if [ "$#" -ne 1 ]; then
     exit 1
 fi
 
-TAG=$1
-VERSION=$(echo "${TAG}" | cut -d'/' -f2)
-TYPE=$(echo "${TAG}" | cut -d'/' -f1)
+INPUT=$1
+VERSION=$(echo "${INPUT}" | cut -d'_' -f2)
+TYPE=$(echo "${INPUT}" | cut -d'_' -f1)
 IMAGE=bitvavo-${TYPE}
 
 echo "🚀 Starting build process for Docker image '${IMAGE}:${TAG}'..."
