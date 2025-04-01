@@ -138,9 +138,6 @@ class Trader:
                                     self.state_managers[pair].sell_position,
                                     current_price,
                                     self.config["TRADE_FEE_PERCENTAGE"],
-                                    stop_loss=True,
-                                    max_retries=self.config.get("STOP_LOSS_MAX_RETRIES", 3),
-                                    wait_time=self.config.get("STOP_LOSS_WAIT_TIME", 5)
                                 )
 
 
@@ -183,7 +180,6 @@ class Trader:
                                             self.state_managers[pair].sell_position,
                                             current_price,
                                             self.config["TRADE_FEE_PERCENTAGE"],
-                                            stop_loss=False
                                         )
                                     else:
                                         self.log_message(
@@ -206,7 +202,7 @@ class Trader:
                                 self.log_message(
                                     f"🟢 {pair}: Buying. Price: {current_price:.2f}, RSI={rsi:.2f}. "
                                     f"Open trades: {len(open_positions)} (max allowed: {max_trades}). "
-                                    f"Investeringsbedrag per trade: {investment_per_trade:.2f}",
+                                    f"Investment per trade: {investment_per_trade:.2f}",
                                     to_slack=True
                                 )
                                 await asyncio.to_thread(

@@ -4,7 +4,9 @@ import logging
 from datetime import datetime
 import pandas as pd
 from ta.momentum import RSIIndicator
-from ta.trend import MACD
+from ta.momentum import RSIIndicator, StochasticOscillator
+from ta.trend import MACD, EMAIndicator
+from ta.volatility import AverageTrueRange
 
 
 class TradingUtils:
@@ -106,52 +108,82 @@ class TradingUtils:
                         f"Error fetching account balance for {asset}: {e}") from e
                 time.sleep(delay)
 
-    @staticmethod
-    def place_order(bitvavo, market, side, amount, demo_mode=False, retries=3, delay=2):
-        """
-        Places a buy or sell order via the Bitvavo API or simulates it in demo mode,
-        with retry options for temporary errors.
-        
-        :param bitvavo: Configured Bitvavo API client.
-        :param market: Trading pair, e.g. "BTC-EUR".
-        :param side: "buy" or "sell".
-        :param amount: The amount to buy or sell.
-        :param demo_mode: Whether the order is simulated (default: False).
-        :param retries: Number of attempts before throwing an error (default: 3).
-        :param delay: Delay in seconds between attempts (default: 2).
-        :return: Response from the Bitvavo API or a simulated order.
-        :raises: RuntimeError if placing the order fails after all attempts.
-        """
-        if demo_mode:
-            simulated_order = {
-                "status": "demo",
-                "side": side,
-                "market": market,
-                "amount": amount,
-                "order_type": "market",
-                "timestamp": datetime.now().isoformat()
-            }
-            logging.debug("Simulated order: %s", simulated_order)
-            return simulated_order
 
-        for attempt in range(1, retries + 1):
+    @staticmethod
+    def place_order(bitvavo, market, side, amount, demo_mode=False, max_retries=3):
+        """
+        Attempts to place an order with retries. If it fails due to insufficient balance, it logs the error and skips the trade.
+
+        :param bitvavo: Bitvavo API client instance
+        :param market: Market string (e.g., 'ADA-EUR')
+        :param side: 'buy' or 'sell'
+        :param amount: Amount to buy or sell (float or str)
+        :param demo_mode: If True, simulate the order without placing it
+        :param max_retries: Number of retries before giving up
+        :return: Order response dict or None
+        """
+        asset = market.split('-')[1] if side == 'buy' else market.split('-')[0]
+        balance = TradingUtils.get_account_balance(bitvavo, asset)
+
+        if balance < float(amount):
+            logging.error(
+                f"Insufficient balance for {side} order on {market}. "
+                f"Required: {amount}, Available: {balance}"
+            )
+            return None
+
+        for attempt in range(1, max_retries + 1):
             try:
-                order = bitvavo.placeOrder(
-                    market=market, side=side, orderType="market", body={"amount": amount})
-                if isinstance(order, dict) and order.get("error"):
-                    if "sufficient balance" in order.get('error', '').lower():
-                        logging.error("Insufficient balance to complete the operation for %s: %s", market, order.get('error'))
-                        return None
-                    return None
-                logging.debug("Placed order for %s: %s", market, order)
+                logging.info(
+                    f"Attempt {attempt} to place {side} order for {market} with amount {amount}"
+                )
+
+                if demo_mode:
+                    logging.info(
+                        f"Demo mode: Simulated {side} order for {market} ({amount})"
+                    )
+                    return {"status": "demo", "orderId": "demo_order"}
+
+                # ✅ Fix: gebruik correcte API-aanroep met expliciete parameters
+                body = {
+                    "amount": str(amount)
+                }
+                order = bitvavo.placeOrder(market, side, "market", body)
+
+                if isinstance(order, str):
+                    order = json.loads(order)
+
+                if "error" in order:
+                    raise ValueError(f"API error: {order.get('error')}")
+
                 return order
-            except Exception as e:
+
+            except ValueError as e:
                 logging.warning(
-                    "Attempt %d to place order on %s failed: %s", attempt, market, e)
-                if attempt == retries:
-                    raise RuntimeError(
-                        f"Error placing {side} order for {market}: {e}") from e
-                time.sleep(delay)
+                    f"Attempt {attempt} to place order on {market} failed: {e}"
+                )
+
+                if "insufficient balance" in str(e).lower():
+                    logging.error(
+                        f"Skipping trade for {market} due to insufficient balance."
+                    )
+                    return None
+
+            except Exception as e:
+                logging.error(
+                    f"Unexpected error during {side} order on {market}: {e}"
+                )
+
+            if attempt < max_retries:
+                logging.info("Retrying...")
+
+        logging.error(
+            f"Failed to place {side} order for {market} after {max_retries} attempts."
+        )
+        return None
+
+
+
 
     @staticmethod
     def get_order_details(bitvavo, market, order_id, retries=3, delay=2):
@@ -213,45 +245,213 @@ class TradingUtils:
                 f"Error processing candle data for {pair}: {e}") from e
         logging.debug("Fetched historical prices for %s: %s", pair, prices)
         return prices
-
+    
     @staticmethod
-    def calculate_ema(price_history, window_size):
+    def calculate_atr(high, low, close, window_size):
+        """
+        Calculates the Average True Range (ATR) based on high, low, and close prices.
+        
+        :param high: List of high prices.
+        :param low: List of low prices.
+        :param close: List of close prices.
+        :param window_size: The window for the ATR calculation.
+        :return: The most recent ATR value or None if there is insufficient data.
+        """
+        if len(high) < window_size or len(low) < window_size or len(close) < window_size:
+            return None
+        high_series = pd.Series(high)
+        low_series = pd.Series(low)
+        close_series = pd.Series(close)
+        tr = pd.concat([high_series - low_series, 
+                        (high_series - close_series.shift()).abs(), 
+                        (low_series - close_series.shift()).abs()], axis=1).max(axis=1)
+        atr = tr.rolling(window=window_size).mean()
+        return atr.iloc[-1]
+    
+    @staticmethod
+    def calculate_ema(prices, window_size):
         """
         Calculates the Exponential Moving Average (EMA) based on the price history.
         
-        :param price_history: List of historical prices.
+        :param prices: List of historical prices.
         :param window_size: The window for the EMA calculation.
         :return: The most recent EMA value or None if there is insufficient data.
         """
-        if len(price_history) < window_size:
+        if len(prices) < window_size:
             return None
-        ema_indicator = EMAIndicator(pd.Series(price_history), window=window_size)
-        return ema_indicator.ema_indicator().iloc[-1]
-
+        ema = pd.Series(prices).ewm(span=window_size, adjust=False).mean()
+        return ema.iloc[-1]
+    
+    @staticmethod
+    def calculate_adx(high, low, close, window_size):
+        """
+        Calculates the Average Directional Index (ADX) based on high, low, and close prices.
+        
+        :param high: List of high prices.
+        :param low: List of low prices.
+        :param close: List of close prices.
+        :param window_size: The window for the ADX calculation.
+        :return: The most recent ADX value or None if there is insufficient data.
+        """
+        if len(high) < window_size or len(low) < window_size or len(close) < window_size:
+            return None
+        high_series = pd.Series(high)
+        low_series = pd.Series(low)
+        close_series = pd.Series(close)
+        plus_dm = high_series.diff()
+        minus_dm = low_series.diff()
+        tr = pd.concat([high_series - low_series, 
+                        (high_series - close_series.shift()).abs(), 
+                        (low_series - close_series.shift()).abs()], axis=1).max(axis=1)
+        atr = tr.rolling(window=window_size).mean()
+        plus_di = 100 * (plus_dm.rolling(window=window_size).mean() / atr)
+        minus_di = 100 * (minus_dm.rolling(window=window_size).mean() / atr)
+        dx = (plus_di - minus_di).abs() / (plus_di + minus_di) * 100
+        adx = dx.rolling(window=window_size).mean()
+        return adx.iloc[-1]
+    
     @staticmethod
     def calculate_macd(price_history, window_slow=26, window_fast=12, window_sign=9):
         """
         Calculates the MACD (Moving Average Convergence Divergence) based on the price history.
-        
+
         :param price_history: List of historical prices.
         :param window_slow: The slow window for the MACD calculation (default: 26).
         :param window_fast: The fast window for the MACD calculation (default: 12).
         :param window_sign: The signal window for the MACD calculation (default: 9).
-        :return: A tuple containing the MACD line, signal line, and histogram values.
+        :return: A tuple (macd, signal, histogram).
         """
         if len(price_history) < max(window_slow, window_fast, window_sign):
             return None, None, None
-        macd_indicator = MACD(pd.Series(price_history), window_slow=window_slow, window_fast=window_fast, window_sign=window_sign)
+
+        macd_indicator = MACD(
+            pd.Series(price_history),
+            window_slow=window_slow,
+            window_fast=window_fast,
+            window_sign=window_sign
+        )
+
         macd_line = macd_indicator.macd().iloc[-1]
         signal_line = macd_indicator.macd_signal().iloc[-1]
         macd_histogram = macd_indicator.macd_diff().iloc[-1]
+
         return macd_line, signal_line, macd_histogram
 
+    
+    @staticmethod
+    def calculate_bb(prices, window_size, num_std_dev):
+        """
+        Calculates the Bollinger Bands (BB) based on the price history.
+        
+        :param prices: List of historical prices.
+        :param window_size: The window for the moving average calculation.
+        :param num_std_dev: The number of standard deviations for the bands.
+        :return: A tuple (middle_band, upper_band, lower_band) or None if there is insufficient data.
+        """
+        if len(prices) < window_size:
+            return None
+        prices_series = pd.Series(prices)
+        middle_band = prices_series.rolling(window=window_size).mean()
+        std_dev = prices_series.rolling(window=window_size).std()
+        upper_band = middle_band + (std_dev * num_std_dev)
+        lower_band = middle_band - (std_dev * num_std_dev)
+        return middle_band.iloc[-1], upper_band.iloc[-1], lower_band.iloc[-1]
+    
+    @staticmethod
+    def calculate_obv(prices, volumes):
+        """
+        Calculates the On-Balance Volume (OBV) based on the price and volume history.
+        
+        :param prices: List of historical prices.
+        :param volumes: List of historical volumes.
+        :return: The most recent OBV value.
+        """
+        if len(prices) != len(volumes):
+            raise ValueError("Prices and volumes must have the same length")
+        obv = [0]
+        for i in range(1, len(prices)):
+            if prices[i] > prices[i - 1]:
+                obv.append(obv[-1] + volumes[i])
+            elif prices[i] < prices[i - 1]:
+                obv.append(obv[-1] - volumes[i])
+            else:
+                obv.append(obv[-1])
+        return obv[-1]
+    @staticmethod
+    def calculate_vwap(high, low, close, volume):
+        """
+        Calculates the Volume Weighted Average Price (VWAP) based on high, low, close prices and volume.
+        
+        :param high: List of high prices.
+        :param low: List of low prices.
+        :param close: List of close prices.
+        :param volume: List of volumes.
+        :return: The most recent VWAP value.
+        """
+        typical_price = [(h + l + c) / 3 for h, l, c in zip(high, low, close)]
+        cumulative_tp_vol = sum(tp * v for tp, v in zip(typical_price, volume))
+        cumulative_vol = sum(volume)
+        return cumulative_tp_vol / cumulative_vol if cumulative_vol != 0 else None
+    
+    @staticmethod
+    def calculate_atr(high, low, close, window=14):
+        """
+        Calculates Average True Range (ATR) as a measure of volatility.
+        :param high: List of high prices.
+        :param low: List of low prices.
+        :param close: List of close prices.
+        :param window: Number of periods for ATR (default 14).
+        :return: Most recent ATR value or None.
+        """
+        if len(high) < window or len(low) < window or len(close) < window:
+            return None
+        df = pd.DataFrame({"high": high, "low": low, "close": close})
+        atr = AverageTrueRange(high=df["high"], low=df["low"], close=df["close"], window=window)
+        return atr.average_true_range().iloc[-1]
+    
+    @staticmethod
+    def calculate_momentum(price_history, window=10):
+        """
+        Calculates simple momentum indicator (Price[t] - Price[t-n]).
+        :param price_history: List of prices.
+        :param window: Number of periods for momentum (default 10).
+        :return: Momentum value or None.
+        """
+        if len(price_history) < window:
+            return None
+        return price_history[-1] - price_history[-window]
+    @staticmethod
+    def calculate_volume_change(volumes, window=10):
+        """
+        Calculates volume deviation from moving average.
+        :param volumes: List of volume data.
+        :param window: Number of periods for moving average (default 10).
+        :return: Volume change ratio (current / MA).
+        """
+        if len(volumes) < window:
+            return None
+        vol_series = pd.Series(volumes)
+        vol_ma = vol_series.rolling(window=window).mean().iloc[-1]
+        return (vol_series.iloc[-1] / vol_ma) if vol_ma else 0.0
+    
+    @staticmethod
+    def normalize_features(features):
+        """
+        Normalizes features using min-max normalization.
+        :param features: Numpy array of features.
+        :return: Normalized numpy array in range [0,1].
+        """
+        min_vals = features.min(axis=0)
+        max_vals = features.max(axis=0)
+        denom = (max_vals - min_vals)
+        denom[denom == 0] = 1e-6  # avoid division by zero
+        return (features - min_vals) / denom
+    
     @staticmethod
     def calculate_support_resistance(price_history, window_size):
         """
         Calculates support and resistance levels based on the price history.
-        
+
         :param price_history: List of historical prices.
         :param window_size: The window for the support/resistance calculation.
         :return: A tuple containing the support and resistance levels.
@@ -264,52 +464,71 @@ class TradingUtils:
         support = rolling_min.iloc[-1]
         resistance = rolling_max.iloc[-1]
         return support, resistance
+    
 
     @staticmethod
-    def calculate_coin_score(rsi, macd, signal):
+    def fetch_raw_candles(bitvavo, pair, limit=100, interval="1h"):
         """
-        Calculates a technical score for a coin based on RSI and MACD crossover.
-
-        :param rsi: Current RSI value.
-        :param macd: Current MACD value.
-        :param signal: Current MACD signal line.
-        :return: Technical score (higher is better).
-        """
-        score = 0
-        if rsi is not None:
-            score += max(0, 100 - rsi)
-        if macd is not None and signal is not None:
-            if macd > signal:
-                score += 20
-            score += (macd - signal) * 10
-        return score
-
-    @staticmethod
-    def rank_coins(bitvavo, pairs, price_history, rsi_window=14):
-        """
-        Ranks coins by technical score (RSI + MACD crossover)
+        Fetch full candle data (timestamp, open, high, low, close, volume) for a trading pair.
 
         :param bitvavo: Bitvavo API client
-        :param pairs: List of pairs to evaluate (e.g., ["BTC-EUR", "ETH-EUR"])
-        :param price_history: Dict of recent price history per pair
-        :param rsi_window: RSI window size (default 14)
-        :return: Sorted list of tuples (pair, score)
+        :param pair: Trading pair, e.g. 'BTC-EUR'
+        :param limit: Number of candles
+        :param interval: Candle interval, e.g. '1h'
+        :return: List of candle data lists
         """
-        scores = []
+        candles = bitvavo.candles(pair, interval, {"limit": limit})
+        if isinstance(candles, str):
+            candles = json.loads(candles)
+        if not isinstance(candles, list):
+            raise ValueError(f"Unexpected candle format: {candles}")
+        return candles
 
+
+    @staticmethod
+    def calculate_volume_change(volume_series):
+        if not volume_series or len(volume_series) < 2:
+            return 0.0
+        vol_now = volume_series[-1]
+        vol_avg = sum(volume_series[:-1]) / max(1, len(volume_series) - 1)
+        return (vol_now - vol_avg) / vol_avg if vol_avg != 0 else 0.0
+
+    @staticmethod
+    def rank_coins(bitvavo, pairs: list, price_history: dict, rsi_window: int) -> list:
+        """
+        Rank coins based on a composite indicator score using RSI and MACD.
+    
+        The score favors coins with low RSI (indicating oversold conditions) and
+        a strong MACD momentum (difference between MACD and Signal).
+    
+        :param bitvavo: Bitvavo API client.
+        :param pairs: List of trading pairs.
+        :param price_history: Dict with structure { pair: { "close": [...] } } or raw list.
+        :param rsi_window: Window size for RSI calculation.
+        :return: List of tuples (pair, score), sorted descending.
+        """
+        rankings = []
+    
         for pair in pairs:
             try:
-                prices = price_history.get(pair)
-                if not prices or len(prices) < rsi_window:
+                history = price_history.get(pair, {})
+                # ✅ Support both dict with 'close' key and raw list fallback
+                closes = history.get("close") if isinstance(history, dict) else history
+    
+                if not closes or len(closes) < rsi_window:
                     continue
-
-                rsi = TradingUtils.calculate_rsi(prices, rsi_window)
-                macd, signal, _ = TradingUtils.calculate_macd(prices)
-                score = TradingUtils.calculate_coin_score(rsi, macd, signal)
-                scores.append((pair, score))
-
+                
+                rsi = TradingUtils.calculate_rsi(closes, rsi_window)
+                macd, signal, _ = TradingUtils.calculate_macd(closes)
+    
+                if rsi is None or macd is None or signal is None:
+                    continue
+                
+                score = (100 - rsi) + abs(macd - signal) * 100
+                rankings.append((pair, score))
+    
             except Exception as e:
-                logging.warning(f"Failed to evaluate {pair}: {e}")
+                logging.warning(f"[rank_coins] ⚠️ Failed to score {pair}: {e}")
                 continue
-
-        return sorted(scores, key=lambda x: x[1], reverse=True)
+            
+        return sorted(rankings, key=lambda x: x[1], reverse=True)

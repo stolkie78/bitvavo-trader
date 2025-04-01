@@ -233,7 +233,7 @@ class StateManager:
 # BUY / SELL
 ###########################################
 
-    def sell_position(self, price, fee_percentage, stop_loss=False, max_retries=3, wait_time=5):
+    def sell_position(self, price, fee_percentage):
         """
         Execute a sell order for all open positions or a specific position.
         If stop_loss is True, it will retry if the sell order fails.
@@ -282,61 +282,49 @@ class StateManager:
             revenue = price * quantity * (1 - fee_percentage / 100)
             estimated_profit = revenue - cost_basis
 
-            attempt = 0
-            while attempt < (max_retries if stop_loss else 1):
-                attempt += 1
-                if stop_loss:
-                    self.logger.log(
-                        f"[{self.bot_name}] ⛔️ {self.pair}: Stop loss attempt {attempt}. Trying to sell at {price:.2f}",
-                        to_console=True
-                    )
-
-                order = TradingUtils.place_order(
+            order = TradingUtils.place_order(
                     self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
                 )
 
                 # ✅ Veilig afvangen van None response
-                if not isinstance(order, dict):
-                    self.logger.log(
-                        f"[{self.bot_name}] ❌ {self.pair}: Sell order returned invalid response: {order}",
-                        to_console=True, to_slack=True
-                    )
-                    time.sleep(wait_time)
-                    continue
+            if not isinstance(order, dict):
+                self.logger.log(
+                    f"[{self.bot_name}] ❌ {self.pair}: Sell order returned invalid response: {order}",
+                    to_console=True, to_slack=True
+                )
+                time.sleep(wait_time)
+                continue
 
-                if order.get("status") == "demo" or "orderId" in order:
-                    order_id = order.get("orderId")
-                    actual_profit = None
-                    if order_id:
-                        actual_profit = self.get_actual_trade_profit(
-                            order_id, position, fee_percentage
+            if order.get("status") == "demo" or "orderId" in order:
+                order_id = order.get("orderId")
+                actual_profit = None
+                if order_id:
+                    actual_profit = self.get_actual_trade_profit(
+                        order_id, position, fee_percentage
+                    )
+                profit_to_log = actual_profit if actual_profit is not None else estimated_profit
+                self.log_trade("sell", price, quantity, profit=profit_to_log)
+                # Remove sold position from portfolio
+                if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
+                    try:
+                        self.portfolio[self.pair].remove(position)
+                    except ValueError:
+                        self.logger.log(
+                            f"[{self.bot_name}] ❌ {self.pair}: Position not found in portfolio",
+                            to_console=True
                         )
-
-                    profit_to_log = actual_profit if actual_profit is not None else estimated_profit
-                    self.log_trade("sell", price, quantity, profit=profit_to_log)
-
-                    # Remove sold position from portfolio
-                    if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
-                        try:
-                            self.portfolio[self.pair].remove(position)
-                        except ValueError:
-                            self.logger.log(
-                                f"[{self.bot_name}] ❌ {self.pair}: Position not found in portfolio",
-                                to_console=True
-                            )
-                    self.save_portfolio()
-
-                    self.logger.log(
-                        f"[{self.bot_name}]{self.pair}: 💸 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
-                        to_console=True, to_slack=False
-                    )
-                    break
-                else:
-                    self.logger.log(
-                        f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt}. Response: {order}",
-                        to_console=True, to_slack=True
-                    )
-                    time.sleep(wait_time)
+                self.save_portfolio()
+                self.logger.log(
+                    f"[{self.bot_name}]{self.pair}: 💸 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
+                    to_console=True, to_slack=False
+                )
+                break
+            else:
+                self.logger.log(
+                    f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt}. Response: {order}",
+                    to_console=True, to_slack=True
+                )
+                time.sleep(wait_time)
 
     def buy(self, price, budget, fee_percentage):
             """
@@ -393,7 +381,7 @@ class StateManager:
                 self.save_portfolio()
                 self.log_trade("buy", price, quantity)
                 self.logger.log(
-                    f"[{self.bot_name}]{self.pair}: 👽 Bought Price={price:.2f}, Quantity={quantity:.6f}",
+                    f"[{self.bot_name}] {self.pair}: ☝ Bought Price={price:.2f}, Quantity={quantity:.6f}",
                     to_console=True, to_slack=False
                 )
             else:
