@@ -21,7 +21,7 @@ COPY tools/. tools/
 COPY start.sh .
 
 # Maak het script uitvoerbaar
-RUN chmod +x start.sh
+RUN chmod +x ai_start.sh
 
 # Gebruik start.sh als entrypoint
-ENTRYPOINT ["./start.sh"]
+ENTRYPOINT ["./ai_start.sh"]
