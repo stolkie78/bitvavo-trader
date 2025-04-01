@@ -13,7 +13,7 @@ if [ "$#" -ne 1 ]; then
 fi
 
 INPUT=$1
-VERSION=$(echo "${INPUT}" | cut -d'_' -f2)
+TAG=$(echo "${INPUT}" | cut -d'_' -f2)
 TYPE=$(echo "${INPUT}" | cut -d'_' -f1)
 IMAGE=bitvavo-${TYPE}
 
