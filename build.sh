@@ -7,7 +7,7 @@ handle_error() {
 }
 
 # Validate input arguments
-if [ "$#" -ne 3 ]; then
+if [ "$#" -ne 1 ]; then
     echo "Usage: $0 <tag>"
     exit 1
 fi
