@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Kopieer de rest van de applicatie
 COPY bot/. bot/
 COPY tools/. tools/
+COPY start.sh .
 
-# Stel een standaard entrypoint in
-ENTRYPOINT ["python", "bot/ai_trader.py"]
+# Maak het script uitvoerbaar
+RUN chmod +x start.sh
+
+# Gebruik start.sh als entrypoint
+ENTRYPOINT ["./start.sh"]
