@@ -23,7 +23,7 @@ git checkout main
 echo "🔄 Pulling latest changes..."
 git pull || handle_error "Failed to pull latest changes."
 git fetch -a || handle_error "Failed to fetch all references."
-git checkout "${TAG}" || handle_error "Failed to checkout branch or tag '${TAG}'."
+git checkout "${INPUT}" || handle_error "Failed to checkout branch or tag '${TAG}'."
 
 # Build Docker image
 echo "🐳 Building Docker image '${IMAGE}:${TAG}'..."
