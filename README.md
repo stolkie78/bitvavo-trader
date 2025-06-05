@@ -49,11 +49,6 @@ Below is a detailed explanation of each configuration parameter:
 
 ---
 
-### Cost Management
-- **`TRADING_COST`**: Total trading costs (fees + slippage) as a percentage. Used for conservative profit calculations.
-
----
-
 ### AI and Advanced Features
 - **`USE_LIGHTGBM`**: Whether to use a LightGBM model for enhanced decision-making.
 - **`LIGHTGBM_MODEL_PATH`**: Path to the saved LightGBM model file for predictions.
@@ -116,6 +111,15 @@ spec:
         args:
         - "--config"
         - "/app/config/scalper.json"
+```
+
+---
+
+## Testing
+Run unit tests with:
+
+```bash
+pytest
 ```
 
 ---

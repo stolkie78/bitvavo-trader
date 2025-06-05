@@ -43,7 +43,7 @@ spec:
           requests:
             memory: "128Mi"
             cpu: "250m"
-        env: # Voeg hier eventueel andere environment variables toe
+        env: # Add additional environment variables here if needed
         volumeMounts:
         - name: merged-config
           mountPath: /app/config

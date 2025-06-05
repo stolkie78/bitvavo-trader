@@ -486,14 +486,6 @@ class TradingUtils:
 
 
     @staticmethod
-    def calculate_volume_change(volume_series):
-        if not volume_series or len(volume_series) < 2:
-            return 0.0
-        vol_now = volume_series[-1]
-        vol_avg = sum(volume_series[:-1]) / max(1, len(volume_series) - 1)
-        return (vol_now - vol_avg) / vol_avg if vol_avg != 0 else 0.0
-
-    @staticmethod
     def rank_coins(bitvavo, pairs: list, price_history: dict, rsi_window: int) -> list:
         """
         Rank coins based on a composite indicator score using RSI and MACD.

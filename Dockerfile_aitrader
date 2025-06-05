@@ -1,28 +1,28 @@
-# Gebruik de minimale Python 3.13.1 image
+# Use the minimal Python 3.13.2 image
 FROM python:3.13.2-slim
 
 ENV PYTHONPATH=/app
 
-# Installeren van de benodigde OS-pakketten
+# Install required OS packages
 RUN apt-get update && apt-get install -y && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Stel de werkdirectory in
+# Set the working directory
 WORKDIR /app
 
-# Kopieer de Python dependencies
+# Copy Python dependencies
 COPY requirements.txt .
 
-# Installeer de Python dependencies
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Kopieer de rest van de applicatie
+# Copy the rest of the application
 COPY ai/. ai/
 COPY bot/. bot/
 COPY tools/. tools/
 COPY ai_start.sh .
 
-# Maak het script uitvoerbaar
+# Make the script executable
 RUN chmod +x ai_start.sh
 
-# Gebruik start.sh als entrypoint
+# Use start.sh as entrypoint
 ENTRYPOINT ["./ai_start.sh"]

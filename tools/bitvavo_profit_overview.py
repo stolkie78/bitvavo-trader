@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Script voor het berekenen van de netto winst/verlies (cashflow in EUR) per crypto,
-geaggregeerd per dag, week en maand op basis van een CSV-bestand.
+Script to calculate the net profit/loss (cash flow in EUR) per cryptocurrency
+aggregated by day, week and month from a CSV file.
 
-Verwachte kolommen in de CSV (eerste rij bevat de headers):
+Expected CSV columns (first row contains headers):
     Timezone,Date,Time,Type,Currency,Amount,Quote Currency,Quote Price,
     Received / Paid Currency,Received / Paid Amount,Fee currency,Fee amount,
     Status,Transaction ID,Address
 
-Het script combineert de kolommen Date en Time tot één datetime en berekent:
+The script combines the Date and Time columns into a single datetime and computes:
     Net = (Received / Paid Amount) - (Fee amount)
-Vervolgens worden de resultaten als volgt geaggregeerd:
-  - Daily: per dag wordt per crypto de netto cashflow berekend en er komt een totaalrij ("TOTAL") per dag.
-  - Weekly: per week (ISO-weeknummer) wordt per crypto de netto cashflow berekend en er komt een totaalrij ("TOTAL") per week.
-  - Monthly: per maand (YYYY-MM) wordt per crypto de netto cashflow berekend en er komt een totaalrij ("TOTAL") per maand.
-Daaronder wordt in elke aggregatie ook een set rijen toegevoegd met de grand totals (per currency over de gehele dataset)
-en als laatste één extra rij met de OVERALL total.
+Results are aggregated as follows:
+  - Daily: net cash flow per crypto with a "TOTAL" row per day.
+  - Weekly: net cash flow per crypto per ISO week with a "TOTAL" row per week.
+  - Monthly: net cash flow per crypto per month (YYYY-MM) with a "TOTAL" row per month.
+Each aggregation also appends the grand totals per currency
+and finally adds one overall total row.
 """
 
 import argparse
@@ -25,13 +25,13 @@ import pandas as pd
 
 def parse_datetime(dt_str: str) -> pd.Timestamp:
     """
-    Probeert een datetime-string te parsen met en zonder fractionele seconden.
-    
+    Parse a datetime string with or without fractional seconds.
+
     Args:
-        dt_str (str): Datum- en tijdstring (bijv. "2025-02-11 11:23:05.657" of "2025-02-11 11:23:05")
-    
+        dt_str (str): Date and time string (e.g. "2025-02-11 11:23:05.657" or "2025-02-11 11:23:05").
+
     Returns:
-        pd.Timestamp: De geparste datetime.
+        pd.Timestamp: Parsed datetime.
     """
     try:
         return pd.to_datetime(dt_str, format='%Y-%m-%d %H:%M:%S.%f')
@@ -41,13 +41,13 @@ def parse_datetime(dt_str: str) -> pd.Timestamp:
 
 def read_csv_with_datetime(csv_file: str) -> pd.DataFrame:
     """
-    Leest de CSV in en voegt een DateTime-kolom toe door de kolommen 'Date' en 'Time' te combineren.
-    
+    Read the CSV and add a DateTime column by combining the 'Date' and 'Time' columns.
+
     Args:
-        csv_file (str): Pad naar het CSV-bestand.
-        
+        csv_file (str): Path to the CSV file.
+
     Returns:
-        pd.DataFrame: DataFrame met extra kolom 'DateTime' en berekende 'Net'.
+        pd.DataFrame: DataFrame with an extra 'DateTime' column and calculated 'Net'.
     """
     try:
         df = pd.read_csv(csv_file)
@@ -79,16 +79,16 @@ def read_csv_with_datetime(csv_file: str) -> pd.DataFrame:
 
 def add_overall_total(df_grouped: pd.DataFrame, period_col: str) -> pd.DataFrame:
     """
-    Voegt als laatste één extra rij toe met de overall total over de gehele dataset,
-    ongeacht de periode. Het resultaat bevat dan in de kolom period_col de waarde "OVERALL"
-    en in 'Currency' de waarde "OVERALL".
-    
+    Append a single row with the overall total for the entire dataset,
+    regardless of the period. The added row will have the value "OVERALL" in
+    both the period column and the "Currency" column.
+
     Args:
-        df_grouped (pd.DataFrame): De reeds gegroepeerde DataFrame.
-        period_col (str): De naam van de kolom die de periode bevat ('Day', 'Week' of 'Month').
-    
+        df_grouped (pd.DataFrame): The already grouped DataFrame.
+        period_col (str): Name of the period column ('Day', 'Week' or 'Month').
+
     Returns:
-        pd.DataFrame: De DataFrame met een extra row voor de overall total.
+        pd.DataFrame: The DataFrame with an extra row for the overall total.
     """
     overall_total = pd.DataFrame({
         period_col: ["OVERALL"],
@@ -100,12 +100,12 @@ def add_overall_total(df_grouped: pd.DataFrame, period_col: str) -> pd.DataFrame
 
 def compute_daily(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Bereken de dagelijkse netto cashflow per crypto en voeg per dag een totaalrij toe.
-    Daarna worden de grand totals per currency (over alle dagen) toegevoegd,
-    gevolgd door één overall total rij.
-    
+    Calculate daily net cash flow per cryptocurrency and add a total row per day.
+    Afterwards the grand totals per currency over all days are appended,
+    followed by one overall total row.
+
     Returns:
-        pd.DataFrame: DataFrame met kolommen 'Day', 'Currency' en 'Net', gesorteerd op dag.
+        pd.DataFrame: DataFrame with columns 'Day', 'Currency' and 'Net', sorted by day.
     """
     df["Day"] = df["DateTime"].dt.date.astype(str)
     daily_crypto = df.groupby(["Day", "Currency"])["Net"].sum().reset_index()
@@ -130,13 +130,12 @@ def compute_daily(df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_weekly(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Bereken de wekelijkse netto cashflow per crypto en voeg per week een totaalrij toe.
-    Hierbij wordt het ISO-weeknummer (als string) gebruikt.
-    Daarna worden de grand totals per currency over alle weken toegevoegd,
-    gevolgd door één overall total.
-    
+    Calculate weekly net cash flow per cryptocurrency and add a total row per week.
+    The ISO week number (as a string) is used. Grand totals per currency over all weeks
+    are appended followed by one overall total row.
+
     Returns:
-        pd.DataFrame: DataFrame met kolommen 'Week', 'Currency' en 'Net', gesorteerd op week.
+        pd.DataFrame: DataFrame with columns 'Week', 'Currency' and 'Net', sorted by week.
     """
     df["Week"] = df["DateTime"].dt.isocalendar().week.astype(str)
     weekly_crypto = df.groupby(["Week", "Currency"])["Net"].sum().reset_index()
@@ -161,13 +160,12 @@ def compute_weekly(df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_monthly(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Bereken de maandelijkse netto cashflow per crypto en voeg per maand een totaalrij toe.
-    De maand wordt weergegeven als YYYY-MM.
-    Daarna worden de grand totals per currency over alle maanden toegevoegd,
-    gevolgd door één overall total.
-    
+    Calculate monthly net cash flow per cryptocurrency and add a total row per month.
+    The month is displayed as YYYY-MM. Grand totals per currency over all months are appended,
+    followed by one overall total row.
+
     Returns:
-        pd.DataFrame: DataFrame met kolommen 'Month', 'Currency' en 'Net', gesorteerd op maand.
+        pd.DataFrame: DataFrame with columns 'Month', 'Currency' and 'Net', sorted by month.
     """
     df["Month"] = df["DateTime"].dt.to_period("M").astype(str)
     monthly_crypto = df.groupby(["Month", "Currency"])[
@@ -193,17 +191,19 @@ def compute_monthly(df: pd.DataFrame) -> pd.DataFrame:
 
 def main():
     parser = argparse.ArgumentParser(
-        description=("Bereken de netto winst/verlies (cashflow in EUR) per crypto, "
-                     "geaggregeerd per dag, week en maand. "
-                     "Gebruik --period om te kiezen: daily, weekly, monthly of all. "
-                     "Voor elke aggregatie wordt per periode een totaalrij ('TOTAL') toegevoegd, "
-                     "daaronder de grand totals per currency en als laatste een overall total.")
+        description=(
+            "Calculate net profit/loss (cash flow in EUR) per cryptocurrency, "
+            "aggregated by day, week and month. "
+            "Use --period to choose: daily, weekly, monthly or all. "
+            "Each aggregation adds a 'TOTAL' row per period, "
+            "followed by grand totals per currency and one overall total."
+        )
     )
     parser.add_argument(
-        "csv_file", help="Pad naar het CSV-bestand met transactiegegevens.")
+        "csv_file", help="Path to the CSV file with transaction data.")
     parser.add_argument(
         "--period", choices=["daily", "weekly", "monthly", "all"], default="all",
-        help="Aggregatieperiode: daily, weekly, monthly of all (default: all)."
+        help="Aggregation period: daily, weekly, monthly or all (default: all)."
     )
     args = parser.parse_args()
 
@@ -218,7 +218,7 @@ def main():
         results["Monthly"] = compute_monthly(df)
 
     for key, result in results.items():
-        print(f"\nNetto winst/verlies ({key}):")
+        print(f"\nNet profit/loss ({key}):")
         print(result.to_string(index=False))
 
 
