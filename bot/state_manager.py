@@ -233,17 +233,18 @@ class StateManager:
 # BUY / SELL
 ###########################################
 
-    def sell_position(self, price, fee_percentage):
-        """
-        Execute a sell order for all open positions or a specific position.
-        If stop_loss is True, it will retry if the sell order fails.
+    def sell_position(self, price, fee_percentage, max_retries=3, wait_time=5):
+        """Execute a sell order for all open positions.
+
+        The method will retry ``max_retries`` times when the API returns an
+        invalid response.  A short pause of ``wait_time`` seconds is inserted
+        between retries.
 
         Args:
             price (float): The sell price.
             fee_percentage (float): The transaction fee in percent.
-            stop_loss (bool): If True, retries the sell in case of failure.
-            max_retries (int): Maximum number of retries for stop-loss (default: 3).
-            wait_time (int): Time in seconds to wait between retries (default: 5).
+            max_retries (int, optional): Number of retry attempts. Defaults to ``3``.
+            wait_time (int, optional): Seconds to wait between retries. Defaults to ``5``.
         """
         open_positions = self.get_open_positions()
         if not open_positions:
@@ -282,49 +283,58 @@ class StateManager:
             revenue = price * quantity * (1 - fee_percentage / 100)
             estimated_profit = revenue - cost_basis
 
-            order = TradingUtils.place_order(
+            for attempt in range(1, max_retries + 1):
+                order = TradingUtils.place_order(
                     self.bitvavo, self.pair, "sell", quantity, demo_mode=self.demo_mode
                 )
 
                 # ✅ Veilig afvangen van None response
-            if not isinstance(order, dict):
-                self.logger.log(
-                    f"[{self.bot_name}] ❌ {self.pair}: Sell order returned invalid response: {order}",
-                    to_console=True, to_slack=True
-                )
-                time.sleep(wait_time)
-                continue
-
-            if order.get("status") == "demo" or "orderId" in order:
-                order_id = order.get("orderId")
-                actual_profit = None
-                if order_id:
-                    actual_profit = self.get_actual_trade_profit(
-                        order_id, position, fee_percentage
+                if not isinstance(order, dict):
+                    self.logger.log(
+                        f"[{self.bot_name}] ❌ {self.pair}: Sell order returned invalid response: {order}",
+                        to_console=True, to_slack=True
                     )
-                profit_to_log = actual_profit if actual_profit is not None else estimated_profit
-                self.log_trade("sell", price, quantity, profit=profit_to_log)
-                # Remove sold position from portfolio
-                if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
-                    try:
-                        self.portfolio[self.pair].remove(position)
-                    except ValueError:
-                        self.logger.log(
-                            f"[{self.bot_name}] ❌ {self.pair}: Position not found in portfolio",
-                            to_console=True
+                elif order.get("status") == "demo" or "orderId" in order:
+                    order_id = order.get("orderId")
+                    actual_profit = None
+                    if order_id:
+                        actual_profit = self.get_actual_trade_profit(
+                            order_id, position, fee_percentage
                         )
-                self.save_portfolio()
-                self.logger.log(
-                    f"[{self.bot_name}]{self.pair}: 💸 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
-                    to_console=True, to_slack=False
-                )
-                break
+                    profit_to_log = actual_profit if actual_profit is not None else estimated_profit
+                    self.log_trade("sell", price, quantity, profit=profit_to_log)
+                    # Remove sold position from portfolio
+                    if self.pair in self.portfolio and isinstance(self.portfolio[self.pair], list):
+                        try:
+                            self.portfolio[self.pair].remove(position)
+                        except ValueError:
+                            self.logger.log(
+                                f"[{self.bot_name}] ❌ {self.pair}: Position not found in portfolio",
+                                to_console=True
+                            )
+                    self.save_portfolio()
+                    self.logger.log(
+                        f"[{self.bot_name}]{self.pair}: 💸 Sold Price={price:.2f}, Profit={profit_to_log:.2f}",
+                        to_console=True, to_slack=False
+                    )
+                    break
+                else:
+                    self.logger.log(
+                        f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt}. Response: {order}",
+                        to_console=True, to_slack=True
+                    )
+
+                if attempt < max_retries:
+                    time.sleep(wait_time)
+                else:
+                    self.logger.log(
+                        f"[{self.bot_name}]{self.pair}: ❌ Sell failed after {max_retries} attempts",
+                        to_console=True, to_slack=True
+                    )
+
             else:
-                self.logger.log(
-                    f"[{self.bot_name}]{self.pair}: ❌ Failed sell attempt {attempt}. Response: {order}",
-                    to_console=True, to_slack=True
-                )
-                time.sleep(wait_time)
+                continue
+            break
 
     def buy(self, price, budget, fee_percentage):
             """
