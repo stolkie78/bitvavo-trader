@@ -8,3 +8,4 @@ slack-sdk
 python-bitvavo-api
 joblib
 scikit-learn
+pytest

@@ -5,13 +5,13 @@ from datetime import datetime
 
 def calculate_daily_profit_per_crypto(trades_file):
     """
-    Bereken de dagelijkse winst/verlies per crypto-paar uit trades.json.
-    
+    Calculate the daily profit/loss per crypto pair from trades.json.
+
     Args:
-        trades_file (str): Pad naar het trades.json-bestand.
-    
+        trades_file (str): Path to the trades.json file.
+
     Returns:
-        pd.DataFrame: DataFrame met datum, crypto-paar en dagelijkse winst/verlies in euro's.
+        pd.DataFrame: DataFrame with date, crypto pair and daily profit/loss in euros.
     """
     try:
         # Trades laden uit het JSON-bestand
@@ -19,7 +19,7 @@ def calculate_daily_profit_per_crypto(trades_file):
             trades = json.load(f)
 
         if not trades:
-            print("❌ Geen trades gevonden in trades.json")
+            print("❌ No trades found in trades.json")
             return pd.DataFrame(columns=["date", "pair", "profit_eur"])
 
         # Zet de trades om naar een DataFrame en verwerk de timestamp
@@ -27,20 +27,20 @@ def calculate_daily_profit_per_crypto(trades_file):
         df["timestamp"] = pd.to_datetime(df["timestamp"])
         df["date"] = df["timestamp"].dt.date
 
-        # Selecteer alleen verkooptransacties
+        # Select only sell transactions
         df_sells = df[df["type"] == "sell"]
 
         if df_sells.empty:
-            print("❌ Geen verkooptransacties gevonden in trades.json")
+            print("❌ No sell transactions found in trades.json")
             return pd.DataFrame(columns=["date", "pair", "profit_eur"])
 
-        # Groepeer op datum en crypto-paar en tel de winst (in euro's) bij elkaar op
+        # Group by date and pair and sum the profit in euros
         daily_profit_per_crypto = df_sells.groupby(
             ["date", "pair"])["profit_eur"].sum().reset_index()
         return daily_profit_per_crypto
 
     except Exception as e:
-        print(f"❌ Fout bij het berekenen van dagelijkse winst per crypto: {e}")
+        print(f"❌ Error calculating daily profit per crypto: {e}")
         return pd.DataFrame(columns=["date", "pair", "profit_eur"])
 
 
