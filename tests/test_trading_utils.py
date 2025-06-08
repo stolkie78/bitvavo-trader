@@ -21,3 +21,15 @@ def test_calculate_volume_change():
 
 def test_calculate_volume_change_insufficient():
     assert TradingUtils.calculate_volume_change([1, 2, 3]) is None
+
+
+def test_calculate_support_resistance():
+    prices = list(range(1, 21))
+    support, resistance = TradingUtils.calculate_support_resistance(prices, 20)
+    assert support == 1
+    assert resistance == 20
+
+
+def test_calculate_support_resistance_insufficient():
+    result = TradingUtils.calculate_support_resistance([1, 2, 3], 5)
+    assert result == (None, None)
