@@ -12,6 +12,7 @@ The bot utilizes various configurations and parameters to optimize its trading s
 3. [Docker Deployment](#docker-deployment)
 4. [Kubernetes Deployment](#kubernetes-deployment)
 5. [Logging and State Management](#logging-and-state-management)
+6. [Resistance Bot](#resistance-bot)
 
 ---
 
@@ -134,3 +135,32 @@ The bot logs all activities to a specified file and maintains its state in JSON 
 ---
 
 Feel free to customize the configuration to optimize the bot for your trading strategy!
+
+---
+
+## Resistance Bot
+
+`resistance_bot.py` trades based on support and resistance levels combined with
+the predictions of the bundled AI models. The bot supports two modes:
+
+- **HODL** – keeps a single position per pair and waits for a sell signal.
+- **DAYTRADE** – allows multiple trades per pair each day.
+
+Create a `config/resistance_bot.json` file (see example below) and
+run the bot with:
+
+```bash
+python bot/resistance_bot.py --config config/resistance_bot.json
+```
+
+Example configuration:
+
+```json
+{
+  "PROFILE": "RESIST",
+  "MODE": "DAYTRADE",
+  "PAIRS": ["BTC-EUR"],
+  "TOTAL_BUDGET": 100,
+  "PORTFOLIO_ALLOCATION": { "BTC-EUR": 100 }
+}
+```
