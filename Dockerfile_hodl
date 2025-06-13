@@ -1,5 +1,5 @@
 # Use the minimal Python 3.13.2 image
-FROM python:3.13.2-slim
+FROM python:3.13.5-slim
 
 ENV PYTHONPATH=/app
 
